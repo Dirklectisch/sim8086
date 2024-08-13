@@ -100,7 +100,7 @@ const Instruction = packed struct {
             .rm => value.formatRegister(.reg),
         };
 
-        try writer.print("{s} {s},{s}", .{mnemonic, leftOperand, rightOperand});
+        try writer.print("{s} {s}, {s}", .{mnemonic, leftOperand, rightOperand});
     }
 };
 
@@ -116,18 +116,30 @@ pub fn main() u8 {
     };
     defer file.close();
 
-    const bytes = file.reader().readInt(u16, std.builtin.Endian.big) catch |err| {
-        std.log.err("{!}: Failed to read 16 bits", .{ err });
-        return 0;
-    };
-
-    const inst: Instruction = @bitCast(bytes);
-
+    var bytes: u16 = undefined;
+    var eof = false;
+    var reader = file.reader();
     const writer = std.io.getStdOut().writer();
-    std.fmt.format(writer, "bits 16\n{any}\n", .{inst}) catch |err| {
+
+    std.fmt.format(writer, "bits 16\n", .{}) catch |err| {
         std.log.err("{!}: Failed to write to standard out", .{ err });
         return 0;
     };
+
+
+    while (eof == false) {
+        bytes = reader.readInt(u16, std.builtin.Endian.big) catch {
+            eof = true;
+            break;
+        };
+
+        const inst: Instruction = @bitCast(bytes);
+
+        std.fmt.format(writer, "{any}\n", .{inst}) catch |err| {
+            std.log.err("{!}: Failed to write to standard out", .{ err });
+            return 0;
+        };
+    }
 
     return 0;
 }
