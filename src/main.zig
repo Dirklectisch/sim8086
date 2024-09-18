@@ -30,10 +30,6 @@ pub fn parseArgs() ArgumentError!Arguments {
 
 // Instruction decoding
 
-const Opcode = enum(u6) {
-    mov = 0b100010,
-};
-
 const Destination = enum(u1) {
     rm = 0b0,
     reg = 0b1,
@@ -51,58 +47,199 @@ const Mode = enum(u2) {
     RegNo = 0b11, // Register Mode, no displacement
 };
 
-const Instruction = packed struct {
-    rm: u3,
-    reg: u3,
-    mod: Mode,
-    wide: Wide,
-    dest: Destination,
-    opcode: Opcode,
-
-    fn formatRegister(inst: Instruction, field: enum {rm, reg}) []const u8 {
-        const bits: u3 = switch (field) {
-            .rm => inst.rm,
-            .reg => inst.reg
-        };
-
-        return switch (inst.wide) {
-            Wide.eight => switch (bits) {
-                0b000 => "al",
-                0b001 => "cl",
-                0b010 => "dl",
-                0b011 => "bl",
-                0b100 => "ah",
-                0b101 => "ch",
-                0b110 => "dh",
-                0b111 => "bh",
-            },
-            Wide.sixteen => switch (bits) {
-                0b000 => "ax",
-                0b001 => "cx",
-                0b010 => "dx",
-                0b011 => "bx",
-                0b100 => "sp",
-                0b101 => "bp",
-                0b110 => "si",
-                0b111 => "di",
-            },
-        };
-    }
-
-    pub fn format(value: Instruction, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        const mnemonic = std.enums.tagName(Opcode, value.opcode) orelse unreachable;
-        const leftOperand = switch (value.dest) {
-            .reg => value.formatRegister(.reg),
-            .rm => value.formatRegister(.rm),
-        };
-        const rightOperand = switch (value.dest) {
-            .reg => value.formatRegister(.rm),
-            .rm => value.formatRegister(.reg),
-        };
-
-        try writer.print("{s} {s}, {s}", .{mnemonic, leftOperand, rightOperand});
+const Register = enum {
+    AX,
+    AL,
+    AH,
+    BX,
+    BL,
+    BH,
+    CX,
+    CL,
+    CH,
+    DX,
+    DL,
+    DH,
+    SP,
+    BP,
+    SI,
+    DI,
+    pub fn format(val: Register, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        var tag: [2]u8 = undefined;
+        _ = std.ascii.lowerString(&tag, @tagName(val));
+        try writer.print("{s}", .{tag});
     }
 };
+
+fn findRegister(wide: Wide, bits: u3) Register {
+    return switch (wide) {
+        Wide.eight => switch (bits) {
+            0b000 => Register.AL,
+            0b001 => Register.CL,
+            0b010 => Register.DL,
+            0b011 => Register.BL,
+            0b100 => Register.AH,
+            0b101 => Register.CH,
+            0b110 => Register.DH,
+            0b111 => Register.BH,
+        },
+        Wide.sixteen => switch (bits) {
+            0b000 => Register.AX,
+            0b001 => Register.CX,
+            0b010 => Register.DX,
+            0b011 => Register.BX,
+            0b100 => Register.SP,
+            0b101 => Register.BP,
+            0b110 => Register.SI,
+            0b111 => Register.DI,
+        },
+    };
+}
+
+pub fn takeFourBits(byte: u8) u4 {
+    const DividedByte4 = packed struct { right: u4, left: u4 };
+    const parts: DividedByte4 = @bitCast(byte);
+    return parts.left;
+}
+
+pub fn takeSixBits(byte: u8) u6 {
+    const DividedByte6 = packed struct { right: u2, left: u6 };
+    const parts: DividedByte6 = @bitCast(byte);
+    return parts.left;
+}
+
+pub fn takeSevenBits(byte: u8) u7 {
+    const DividedByte7 = packed struct { right: u2, left: u7 };
+    const parts: DividedByte7 = @bitCast(byte);
+    return parts.left;
+}
+
+const InstMovImToReg = struct {
+    opcode: u4,
+    w: Wide,
+    reg: Register,
+    data: i16,
+
+    pub fn format(value: InstMovImToReg, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        const mnemonic = "mov";
+        try writer.print("{s} {s}, {d}", .{ mnemonic, value.reg, value.data });
+    }
+};
+
+const DisplLength = enum { eight, sixteen, none };
+
+const EffAddrCalc = struct {
+    regs: []const Register,
+    dispLength: DisplLength,
+
+    pub fn format(val: EffAddrCalc, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        for (val.regs, 0..) |reg, idx| {
+            if (idx > 0) {
+                try writer.print(" + ", .{});
+            }
+            try writer.print("{s}", .{reg});
+        }
+    }
+};
+
+fn findCalc(mod: Mode, rmbits: u3) EffAddrCalc {
+    const notFound = EffAddrCalc{
+        .regs = &[_]Register{},
+        .dispLength = DisplLength.none,
+    };
+
+    return switch (mod) {
+        Mode.MemNo => switch (rmbits) {
+            0b000 => EffAddrCalc{ .regs = &[_]Register{ Register.BX, Register.SI }, .dispLength = DisplLength.none },
+            0b001 => EffAddrCalc{ .regs = &[_]Register{ Register.BX, Register.DI }, .dispLength = DisplLength.none },
+            0b010 => EffAddrCalc{ .regs = &[_]Register{ Register.BP, Register.SI }, .dispLength = DisplLength.none },
+            0b011 => EffAddrCalc{ .regs = &[_]Register{ Register.BP, Register.DI }, .dispLength = DisplLength.none },
+            0b100 => EffAddrCalc{ .regs = &[_]Register{Register.SI}, .dispLength = DisplLength.none },
+            0b101 => EffAddrCalc{ .regs = &[_]Register{Register.DI}, .dispLength = DisplLength.none },
+            0b111 => EffAddrCalc{ .regs = &[_]Register{Register.BX}, .dispLength = DisplLength.none },
+            else => notFound,
+        },
+        Mode.MemEight => switch (rmbits) {
+            0b000 => EffAddrCalc{ .regs = &[_]Register{ Register.BX, Register.SI }, .dispLength = DisplLength.eight },
+            0b001 => EffAddrCalc{ .regs = &[_]Register{ Register.BX, Register.DI }, .dispLength = DisplLength.eight },
+            0b010 => EffAddrCalc{ .regs = &[_]Register{ Register.BP, Register.SI }, .dispLength = DisplLength.eight },
+            0b011 => EffAddrCalc{ .regs = &[_]Register{ Register.BP, Register.DI }, .dispLength = DisplLength.eight },
+            0b100 => EffAddrCalc{ .regs = &[_]Register{Register.SI}, .dispLength = DisplLength.eight },
+            0b101 => EffAddrCalc{ .regs = &[_]Register{Register.DI}, .dispLength = DisplLength.eight },
+            0b110 => EffAddrCalc{ .regs = &[_]Register{Register.BP}, .dispLength = DisplLength.eight },
+            0b111 => EffAddrCalc{ .regs = &[_]Register{Register.BX}, .dispLength = DisplLength.eight },
+        },
+        Mode.MemSixt => switch (rmbits) {
+            0b000 => EffAddrCalc{ .regs = &[_]Register{ Register.BX, Register.SI }, .dispLength = DisplLength.sixteen },
+            0b001 => EffAddrCalc{ .regs = &[_]Register{ Register.BX, Register.DI }, .dispLength = DisplLength.sixteen },
+            0b010 => EffAddrCalc{ .regs = &[_]Register{ Register.BP, Register.SI }, .dispLength = DisplLength.sixteen },
+            0b011 => EffAddrCalc{ .regs = &[_]Register{ Register.BP, Register.DI }, .dispLength = DisplLength.sixteen },
+            0b100 => EffAddrCalc{ .regs = &[_]Register{Register.SI}, .dispLength = DisplLength.sixteen },
+            0b101 => EffAddrCalc{ .regs = &[_]Register{Register.DI}, .dispLength = DisplLength.sixteen },
+            0b110 => EffAddrCalc{ .regs = &[_]Register{Register.BP}, .dispLength = DisplLength.sixteen },
+            0b111 => EffAddrCalc{ .regs = &[_]Register{Register.BX}, .dispLength = DisplLength.sixteen },
+        },
+        else => notFound,
+    };
+}
+
+const RmType = enum { r, m };
+
+const Rm = union(RmType) {
+    r: Register,
+    m: EffAddrCalc,
+    pub fn format(value: Rm, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (value) {
+            .r => |*r| try writer.print("{s}", .{r.*}),
+            .m => |*m| try writer.print("{s}", .{m.*}),
+        }
+    }
+};
+
+const InstMovRegToMem = struct {
+    opcode: u6,
+    dest: Destination,
+    wide: Wide,
+    mod: Mode,
+    reg: Register,
+    rm: Rm,
+    disp: ?i16,
+    pub fn format(val: InstMovRegToMem, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+
+        const minDisp = val.disp orelse 0;
+        const hasDispl = minDisp > 0;
+        // mnemonic
+        try writer.print("{s} ", .{"mov"});
+
+        // left operand
+        if (val.dest == Destination.rm and !hasDispl) {
+            try writer.print("[{s}], ", .{val.rm});
+        }
+
+        if (val.dest == Destination.rm and hasDispl) {
+            try writer.print("[{s} + {?d}], ", .{val.rm, val.disp});
+        }
+
+        if (val.dest == Destination.reg) {
+            try writer.print("{s}, ", .{val.reg});
+        }
+
+        // right operand
+        if (val.dest == Destination.rm) {
+            try writer.print("{s} ", .{val.reg});
+        }
+
+        if (val.dest == Destination.reg and !hasDispl) {
+            try writer.print("[{s}]", .{val.rm});
+        }
+
+        if (val.dest == Destination.reg and hasDispl) {
+            try writer.print("[{s} + {?d}]", .{val.rm, val.disp});
+        }
+    }
+};
+
+const DEBUG = false;
 
 pub fn main() u8 {
     const args: Arguments = parseArgs() catch |err| {
@@ -116,31 +253,146 @@ pub fn main() u8 {
     };
     defer file.close();
 
-    var bytes: u16 = undefined;
     var eof = false;
     var reader = file.reader();
     const writer = std.io.getStdOut().writer();
 
-    std.fmt.format(writer, "bits 16\n", .{}) catch |err| {
-        std.log.err("{!}: Failed to write to standard out", .{ err });
-        return 0;
+    std.fmt.format(writer, "\n\nbits 16\n\n", .{}) catch |err| {
+        std.log.err("{!}: Failed to write to standard out", .{err});
+        return 1;
     };
 
-
     while (eof == false) {
-        bytes = reader.readInt(u16, std.builtin.Endian.big) catch {
+        const firstByte: u8 = reader.readByte() catch {
             eof = true;
             break;
         };
 
-        const inst: Instruction = @bitCast(bytes);
+        // immediate to register
+        const firstFour: u4 = takeFourBits(firstByte);
+        if (firstFour == 0b1011) {
+            const ByteOne = packed struct {
+                reg: u3,
+                w: u1,
+                opcode: u4,
+            };
 
-        std.fmt.format(writer, "{any}\n", .{inst}) catch |err| {
-            std.log.err("{!}: Failed to write to standard out", .{ err });
-            return 0;
-        };
+            const byteOne: ByteOne = @bitCast(firstByte);
+            const wide: Wide = @enumFromInt(byteOne.w);
+
+            const rawByteTwo = reader.readByte() catch {
+                eof = true;
+                break;
+            };
+
+            var data: i16 = undefined;
+            if (wide == Wide.eight) {
+                data = std.mem.readInt(i8, &[_]u8{ rawByteTwo }, .little);
+            }
+
+            var rawByteThree: ?u8 = null;
+            if (wide == Wide.sixteen) {
+                rawByteThree = reader.readByte() catch {
+                    eof = true;
+                    break;
+                };
+                const highBits = rawByteThree orelse unreachable;
+                data = std.mem.readInt(i16, &[_]u8{ rawByteTwo, highBits }, .little);
+            }
+
+            const inst = InstMovImToReg{
+                .opcode = byteOne.opcode,
+                .w = wide,
+                .reg = findRegister(wide, byteOne.reg),
+                .data = data,
+            };
+
+            if (DEBUG) {
+                if (wide == Wide.sixteen) {
+                    std.log.debug("{b:0>8} {b:0>8} {?b:0>8}", .{ firstByte, rawByteTwo, rawByteThree });
+                } else {
+                    std.log.debug("{b:0>8} {b:0>8}", .{ firstByte, rawByteTwo });
+                }
+            }
+
+            std.fmt.format(writer, "{any}\n", .{inst}) catch |err| {
+                std.log.err("{!}: Failed to write to standard out", .{err});
+                return 1;
+            };
+
+            continue;
+        }
+
+        // Register /memory to/from register
+        const firstSix: u6 = takeSixBits(firstByte);
+        if (firstSix == 0b100010) {
+            const ByteOne = packed struct { w: u1, d: u1, opcode: u6 };
+            const byteOne: ByteOne = @bitCast(firstByte);
+
+            const ByteTwo = packed struct { rm: u3, reg: u3, mod: u2 };
+            const rawByteTwo: u8 = reader.readByte() catch {
+                eof = true;
+                break;
+            };
+            const byteTwo: ByteTwo = @bitCast(rawByteTwo);
+
+            const wide: Wide = @enumFromInt(byteOne.w);
+            const mod: Mode = @enumFromInt(byteTwo.mod);
+            const rm: Rm = switch (mod) {
+                Mode.MemNo => Rm{ .m = findCalc(mod, byteTwo.rm) },
+                Mode.MemEight => Rm{ .m = findCalc(mod, byteTwo.rm) },
+                Mode.MemSixt => Rm{ .m = findCalc(mod, byteTwo.rm) },
+                Mode.RegNo => Rm{ .r = findRegister(wide, byteTwo.rm) },
+            };
+
+            var disp: ?i16 = null;
+            var rawByteThree: ?u8 = null;
+            if (mod == Mode.MemEight or mod == Mode.MemSixt) {
+                rawByteThree = reader.readByte() catch {
+                    eof = true;
+                    break;
+                };
+                disp = rawByteThree orelse null;
+            }
+
+            var rawByteFour: ?u8 = null;
+            if (mod == Mode.MemSixt) {
+                rawByteFour = reader.readByte() catch {
+                    eof = true;
+                    break;
+                };
+                disp = std.mem.readInt(i16, &[_]u8{ rawByteThree orelse unreachable, rawByteFour orelse unreachable }, .little);
+            }
+
+            const inst = InstMovRegToMem{
+                .opcode = byteOne.opcode,
+                .dest = @enumFromInt(byteOne.d),
+                .wide = wide,
+                .mod = mod,
+                .reg = findRegister(wide, byteTwo.reg),
+                .rm = rm,
+                .disp = disp,
+            };
+
+            if (DEBUG) {
+                switch (mod) {
+                    Mode.RegNo => std.log.debug("{b:0>8} {b:0>8}", .{ firstByte, rawByteTwo }),
+                    Mode.MemNo => std.log.debug("{b:0>8} {b:0>8}", .{ firstByte, rawByteTwo }),
+                    Mode.MemEight => std.log.debug("{b:0>8} {b:0>8} {?b:0>8}", .{ firstByte, rawByteTwo, rawByteThree }),
+                    Mode.MemSixt => std.log.debug("{b:0>8} {b:0>8} {?b:0>8} {?b:0>8}", .{ firstByte, rawByteTwo, rawByteThree, rawByteFour }),
+                }
+            }
+
+            std.fmt.format(writer, "{any}\n", .{inst}) catch |err| {
+                std.log.err("{!}: Failed to write to standard out", .{err});
+                return 1;
+            };
+
+            continue;
+        }
+
+        std.log.warn("Byte skipped: {b:0>8}", .{firstByte});
     }
 
     return 0;
 }
-
