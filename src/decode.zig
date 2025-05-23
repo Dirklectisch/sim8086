@@ -12,7 +12,7 @@ const FieldName = enum {
 
 const FieldSpec = struct { name: FieldName, length: u8 };
 
-pub fn FieldBitSize(comptime name: FieldName) comptime_int {
+pub fn fieldBitSize(comptime name: FieldName) comptime_int {
     return switch (name) {
         FieldName.D => 1,
         FieldName.W => 1,
@@ -23,7 +23,7 @@ pub fn FieldBitSize(comptime name: FieldName) comptime_int {
 }
 
 pub fn FieldType(comptime name: FieldName) type {
-    return switch (FieldBitSize(name)) {
+    return switch (fieldBitSize(name)) {
         1 => u1,
         2 => u2,
         3 => u3,
@@ -42,7 +42,7 @@ const specTable = .{
     FieldName.RM,
 };
 
-// In memory representations of decoded instruction
+// In memory representations of decoded bits
 
 const CapturedBits = struct {
     D: ?FieldType(FieldName.D),
@@ -60,33 +60,29 @@ const CapturedBits = struct {
             .RM = null,
         };
     }
-};
 
-fn setBitsField(s: *CapturedBits, field: FieldName, value: u8) void {
-    switch (field) {
-        FieldName.D => s.D = @intCast(value),
-        FieldName.W => s.W = @intCast(value),
-        FieldName.MOD => s.MOD = @intCast(value),
-        FieldName.REG => s.REG = @intCast(value),
-        FieldName.RM => s.RM = @intCast(value),
+    pub fn setBitsField(this: *CapturedBits, field: FieldName, value: u8) void {
+        switch (field) {
+            FieldName.D => this.D = @intCast(value),
+            FieldName.W => this.W = @intCast(value),
+            FieldName.MOD => this.MOD = @intCast(value),
+            FieldName.REG => this.REG = @intCast(value),
+            FieldName.RM => this.RM = @intCast(value),
+        }
     }
-}
-
-const Instruction = struct {
-    opName: []const u8,
 };
 
-// Decoding logic and utilities
+// Decoding logic
 
 const DecodeBytesError = error{ NotEnoughBytes, SpecDoesNotMatch };
 
-pub fn DecodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
+pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
     var captured = CapturedBits.init();
     var bitCursor: u32 = 0;
 
     inline for (spec, 0..) |s, i| {
         const bitSize = switch (@TypeOf(s)) {
-            FieldName => FieldBitSize(s),
+            FieldName => fieldBitSize(s),
             else => @bitSizeOf(@TypeOf(s)),
         };
 
@@ -115,7 +111,7 @@ pub fn DecodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
         const bits: u8 = (byte >> bitShift) & bitMask;
 
         switch (@TypeOf(s)) {
-            FieldName => setBitsField(&captured, s, bits),
+            FieldName => captured.setBitsField(s, bits),
             else => {
                 const bitsInt: u8 = @intCast(s); 
                 if (bitsInt != bits) {
@@ -132,8 +128,112 @@ pub fn DecodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
     return captured;
 }
 
+// In memory representation of intstuctions
+
+const OperationName = enum {
+    MOV,
+};
+
+const Register = enum {
+    AX,
+    AL,
+    AH,
+    BX,
+    BL,
+    BH,
+    CX,
+    CL,
+    CH,
+    DX,
+    DL,
+    DH,
+    SP,
+    BP,
+    SI,
+    DI,
+};
+
+fn findRegister(wide: u1, reg: u3) Register {
+    return switch (wide) {
+        0b0 => switch (reg) {
+            0b000 => Register.AL,
+            0b001 => Register.CL,
+            0b010 => Register.DL,
+            0b011 => Register.BL,
+            0b100 => Register.AH,
+            0b101 => Register.CH,
+            0b110 => Register.DH,
+            0b111 => Register.BH,
+        },
+        0b1 => switch (reg) {
+            0b000 => Register.AX,
+            0b001 => Register.CX,
+            0b010 => Register.DX,
+            0b011 => Register.BX,
+            0b100 => Register.SP,
+            0b101 => Register.BP,
+            0b110 => Register.SI,
+            0b111 => Register.DI,
+        },
+    };
+} 
+const OperandType = enum {
+    REGISTER,
+};
+
+const OperandRegister = struct {
+    target: Register
+};
+
+const Operand = union(OperandType) {
+    REGISTER: OperandRegister
+};
+
+const Instruction = struct {
+    name: OperationName,
+    destination: Operand,
+    source: Operand
+};
+
+const DecodeInstructionError = error{ UnrecognizedBits };
+
+fn decodeInstruction(bits: CapturedBits) !Instruction {
+    const bitsW  = bits.W orelse return DecodeInstructionError.UnrecognizedBits;
+    const bitsREG  = bits.REG orelse return DecodeInstructionError.UnrecognizedBits;
+    
+    const regOperand = OperandRegister{
+        .target = findRegister(bitsW, bitsREG),
+    };
+    
+    const bitsD  = bits.D orelse return DecodeInstructionError.UnrecognizedBits;
+    var inst = Instruction {
+        .name = OperationName.MOV,
+        .destination = undefined,
+        .source = undefined
+    }; 
+    
+    switch (bitsD) {
+        0b0 => inst.source.REGISTER = regOperand,
+        0b1 => inst.destination.REGISTER = regOperand,
+    }
+
+    const bitsRM  = bits.RM orelse return DecodeInstructionError.UnrecognizedBits;
+    const rmOperand = OperandRegister{
+        .target = findRegister(bitsW, bitsRM),
+    };
+
+    switch (bitsD) {
+        0b0 => inst.destination.REGISTER = rmOperand,
+        0b1 => inst.source.REGISTER = rmOperand,
+    }
+    
+    return inst;
+}
+
 pub fn main() !void {
     var exampleBytes = [_]u8{ 0b10001010, 0b10101100 };
-    const bits = try DecodeBytes(specTable, &exampleBytes);
+    const bits = try decodeBytes(specTable, &exampleBytes);
+    const inst = try decodeInstruction(bits);
     std.log.info("{any}", .{bits});
+    std.log.info("{any}", .{inst});
 }
