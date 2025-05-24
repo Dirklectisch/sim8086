@@ -51,6 +51,8 @@ const CapturedBits = struct {
     REG: ?FieldType(FieldName.REG),
     RM: ?FieldType(FieldName.RM),
     
+    bytesRead: usize,
+    
     pub fn init() CapturedBits {
         return CapturedBits{
             .D = null, 
@@ -58,6 +60,7 @@ const CapturedBits = struct {
             .MOD = null,
             .REG = null,
             .RM = null,
+            .bytesRead = 0,
         };
     }
 
@@ -78,7 +81,7 @@ const DecodeBytesError = error{ NotEnoughBytes, SpecDoesNotMatch };
 
 pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
     var captured = CapturedBits.init();
-    var bitCursor: u32 = 0;
+    var bitCursor: usize = 0;
 
     inline for (spec, 0..) |s, i| {
         const bitSize = switch (@TypeOf(s)) {
@@ -115,6 +118,10 @@ pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
             else => {
                 const bitsInt: u8 = @intCast(s); 
                 if (bitsInt != bits) {
+                    std.log.err(
+                        "{!}: Unexpected bits, did not encounter pattern {b}",
+                        .{DecodeBytesError.SpecDoesNotMatch, s}
+                    );
                     return DecodeBytesError.SpecDoesNotMatch;
                 }
             },
@@ -124,6 +131,9 @@ pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
 
         bitCursor += bitSize;
     }
+    
+    const bitCursorFloat: f16 = @floatFromInt(bitCursor);
+    captured.bytesRead = @intFromFloat(@ceil(bitCursorFloat / 8)); 
 
     return captured;
 }
@@ -195,17 +205,17 @@ const Instruction = struct {
     source: Operand
 };
 
-const DecodeInstructionError = error{ UnrecognizedBits };
+const DecodeCapturedBitsError = error{ UnrecognizedBits };
 
-fn decodeInstruction(bits: CapturedBits) !Instruction {
-    const bitsW  = bits.W orelse return DecodeInstructionError.UnrecognizedBits;
-    const bitsREG  = bits.REG orelse return DecodeInstructionError.UnrecognizedBits;
+fn decodeCapturedBits(bits: CapturedBits) !Instruction {
+    const bitsW  = bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits;
+    const bitsREG  = bits.REG orelse return DecodeCapturedBitsError.UnrecognizedBits;
     
     const regOperand = OperandRegister{
         .target = findRegister(bitsW, bitsREG),
     };
     
-    const bitsD  = bits.D orelse return DecodeInstructionError.UnrecognizedBits;
+    const bitsD  = bits.D orelse return DecodeCapturedBitsError.UnrecognizedBits;
     var inst = Instruction {
         .name = OperationName.MOV,
         .destination = undefined,
@@ -217,7 +227,7 @@ fn decodeInstruction(bits: CapturedBits) !Instruction {
         0b1 => inst.destination.REGISTER = regOperand,
     }
 
-    const bitsRM  = bits.RM orelse return DecodeInstructionError.UnrecognizedBits;
+    const bitsRM  = bits.RM orelse return DecodeCapturedBitsError.UnrecognizedBits;
     const rmOperand = OperandRegister{
         .target = findRegister(bitsW, bitsRM),
     };
@@ -230,10 +240,22 @@ fn decodeInstruction(bits: CapturedBits) !Instruction {
     return inst;
 }
 
-pub fn main() !void {
-    var exampleBytes = [_]u8{ 0b10001010, 0b10101100 };
-    const bits = try decodeBytes(specTable, &exampleBytes);
-    const inst = try decodeInstruction(bits);
-    std.log.info("{any}", .{bits});
-    std.log.info("{any}", .{inst});
+pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]Instruction {
+    
+    var bytesRead: usize = 0;
+    var endOfStream = false;
+    var captured: CapturedBits = undefined;
+    var inst: Instruction = undefined;
+    var result = std.ArrayList(Instruction).init(allocator);
+    
+    while(!endOfStream) {
+        captured = try decodeBytes(specTable, memory);
+        inst = try decodeCapturedBits(captured);
+        try result.append(inst);
+        
+        bytesRead += captured.bytesRead;
+        endOfStream = memory.len >= bytesRead;
+    }
+    
+    return result.toOwnedSlice();
 }
