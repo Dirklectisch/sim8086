@@ -1,4 +1,5 @@
 const std = @import("std");
+const t = @import("types.zig");
 
 // Declarative reader specifications
 
@@ -138,86 +139,46 @@ pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
     return captured;
 }
 
-// In memory representation of intstuctions
+// Transform captured bits into structions
 
-const OperationName = enum {
-    MOV,
-};
-
-const Register = enum {
-    AX,
-    AL,
-    AH,
-    BX,
-    BL,
-    BH,
-    CX,
-    CL,
-    CH,
-    DX,
-    DL,
-    DH,
-    SP,
-    BP,
-    SI,
-    DI,
-};
-
-fn findRegister(wide: u1, reg: u3) Register {
+fn findRegister(wide: u1, reg: u3) t.Register {
     return switch (wide) {
         0b0 => switch (reg) {
-            0b000 => Register.AL,
-            0b001 => Register.CL,
-            0b010 => Register.DL,
-            0b011 => Register.BL,
-            0b100 => Register.AH,
-            0b101 => Register.CH,
-            0b110 => Register.DH,
-            0b111 => Register.BH,
+            0b000 => t.Register.AL,
+            0b001 => t.Register.CL,
+            0b010 => t.Register.DL,
+            0b011 => t.Register.BL,
+            0b100 => t.Register.AH,
+            0b101 => t.Register.CH,
+            0b110 => t.Register.DH,
+            0b111 => t.Register.BH,
         },
         0b1 => switch (reg) {
-            0b000 => Register.AX,
-            0b001 => Register.CX,
-            0b010 => Register.DX,
-            0b011 => Register.BX,
-            0b100 => Register.SP,
-            0b101 => Register.BP,
-            0b110 => Register.SI,
-            0b111 => Register.DI,
+            0b000 => t.Register.AX,
+            0b001 => t.Register.CX,
+            0b010 => t.Register.DX,
+            0b011 => t.Register.BX,
+            0b100 => t.Register.SP,
+            0b101 => t.Register.BP,
+            0b110 => t.Register.SI,
+            0b111 => t.Register.DI,
         },
     };
-} 
-const OperandType = enum {
-    REGISTER,
-};
-
-const OperandRegister = struct {
-    target: Register
-};
-
-const Operand = union(OperandType) {
-    REGISTER: OperandRegister
-};
-
-const Instruction = struct {
-    name: OperationName,
-    destination: Operand,
-    source: Operand
-};
+}
 
 const DecodeCapturedBitsError = error{ UnrecognizedBits };
 
-fn decodeCapturedBits(bits: CapturedBits) !Instruction {
+fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     const bitsW  = bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits;
     const bitsREG  = bits.REG orelse return DecodeCapturedBitsError.UnrecognizedBits;
     
-    const regOperand = OperandRegister{
+    const regOperand = t.OperandRegister{
         .target = findRegister(bitsW, bitsREG),
     };
     
     const bitsD  = bits.D orelse return DecodeCapturedBitsError.UnrecognizedBits;
-    var inst = Instruction {
-        .name = OperationName.MOV,
+    var inst = t.Instruction {
+        .name = t.OperationName.MOV,
         .destination = undefined,
         .source = undefined
     }; 
@@ -228,7 +189,7 @@ fn decodeCapturedBits(bits: CapturedBits) !Instruction {
     }
 
     const bitsRM  = bits.RM orelse return DecodeCapturedBitsError.UnrecognizedBits;
-    const rmOperand = OperandRegister{
+    const rmOperand = t.OperandRegister{
         .target = findRegister(bitsW, bitsRM),
     };
 
@@ -240,13 +201,13 @@ fn decodeCapturedBits(bits: CapturedBits) !Instruction {
     return inst;
 }
 
-pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]Instruction {
+pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction {
     
     var bytesRead: usize = 0;
     var endOfStream = false;
     var captured: CapturedBits = undefined;
-    var inst: Instruction = undefined;
-    var result = std.ArrayList(Instruction).init(allocator);
+    var inst: t.Instruction = undefined;
+    var result = std.ArrayList(t.Instruction).init(allocator);
     
     while(!endOfStream) {
         captured = try decodeBytes(specTable, memory);
