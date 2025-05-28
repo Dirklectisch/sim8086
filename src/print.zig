@@ -24,10 +24,13 @@ pub fn printInstr(inst: t.Instruction, w: anytype) !void {
     try w.print("\n", .{});
 }
 
-pub fn printInstrXs(instructions: []t.Instruction) !void {
+pub fn printInstrXs(instructions: []t.Instruction, path: []const u8) !void {
     const out = std.io.getStdOut();
     var buf = std.io.bufferedWriter(out.writer());
     const w = buf.writer();
+    
+    try w.print("; {s}\n", .{path});
+    try w.print("bits 16\n", .{});
 
     for (instructions) |i| {
         try printInstr(i, w);
@@ -35,4 +38,3 @@ pub fn printInstrXs(instructions: []t.Instruction) !void {
 
     try buf.flush();
 }
-

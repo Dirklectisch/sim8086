@@ -59,7 +59,7 @@ pub fn main() u8 {
         return 1;
     };
     
-    print.printInstrXs(instructions) catch |err| {
+    print.printInstrXs(instructions, args.path) catch |err| {
         std.log.err("{!}: Printing instruction failed", .{ err });
         return 1;
     };
