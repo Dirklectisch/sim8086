@@ -1,24 +1,24 @@
 pub const OperationName = enum {
-    mov,
+    MOV,
 };
 
 pub const Register = enum {
-    ax,
-    al,
-    ah,
-    bx,
-    bl,
-    bh,
-    cx,
-    cl,
-    ch,
-    dx,
-    dl,
-    dh,
-    sp,
-    bp,
-    si,
-    di,
+    AX,
+    AL,
+    AH,
+    BX,
+    BL,
+    BH,
+    CX,
+    CL,
+    CH,
+    DX,
+    DL,
+    DH,
+    SP,
+    BP,
+    SI,
+    DI,
 };
 
 pub const OperandType = enum {
