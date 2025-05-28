@@ -1,5 +1,6 @@
 const std = @import("std");
 const decode = @import("decode.zig");
+const print = @import("print.zig");
 
 // Command line argument parsing
 
@@ -58,6 +59,10 @@ pub fn main() u8 {
         return 1;
     };
     
-    std.log.info("{any}", .{instructions[0]});
+    print.printInstrXs(instructions) catch |err| {
+        std.log.err("{!}: Printing instruction failed", .{ err });
+        return 1;
+    };
+    
     return 0;
 }

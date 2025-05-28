@@ -144,24 +144,24 @@ pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
 fn findRegister(wide: u1, reg: u3) t.Register {
     return switch (wide) {
         0b0 => switch (reg) {
-            0b000 => t.Register.AL,
-            0b001 => t.Register.CL,
-            0b010 => t.Register.DL,
-            0b011 => t.Register.BL,
-            0b100 => t.Register.AH,
-            0b101 => t.Register.CH,
-            0b110 => t.Register.DH,
-            0b111 => t.Register.BH,
+            0b000 => t.Register.al,
+            0b001 => t.Register.cl,
+            0b010 => t.Register.dl,
+            0b011 => t.Register.bl,
+            0b100 => t.Register.ah,
+            0b101 => t.Register.ch,
+            0b110 => t.Register.dh,
+            0b111 => t.Register.bh,
         },
         0b1 => switch (reg) {
-            0b000 => t.Register.AX,
-            0b001 => t.Register.CX,
-            0b010 => t.Register.DX,
-            0b011 => t.Register.BX,
-            0b100 => t.Register.SP,
-            0b101 => t.Register.BP,
-            0b110 => t.Register.SI,
-            0b111 => t.Register.DI,
+            0b000 => t.Register.ax,
+            0b001 => t.Register.cx,
+            0b010 => t.Register.dx,
+            0b011 => t.Register.bx,
+            0b100 => t.Register.sp,
+            0b101 => t.Register.bp,
+            0b110 => t.Register.si,
+            0b111 => t.Register.di,
         },
     };
 }
@@ -178,7 +178,7 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     
     const bitsD  = bits.D orelse return DecodeCapturedBitsError.UnrecognizedBits;
     var inst = t.Instruction {
-        .name = t.OperationName.MOV,
+        .name = t.OperationName.mov,
         .destination = undefined,
         .source = undefined
     }; 
