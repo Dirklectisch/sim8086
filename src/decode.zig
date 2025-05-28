@@ -210,12 +210,12 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
     var result = std.ArrayList(t.Instruction).init(allocator);
     
     while(!endOfStream) {
-        captured = try decodeBytes(specTable, memory);
+        captured = try decodeBytes(specTable, memory[bytesRead..]);
         inst = try decodeCapturedBits(captured);
         try result.append(inst);
         
         bytesRead += captured.bytesRead;
-        endOfStream = memory.len >= bytesRead;
+        endOfStream = memory.len <= bytesRead;
     }
     
     return result.toOwnedSlice();
