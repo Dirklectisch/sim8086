@@ -11,7 +11,14 @@ const FieldName = enum {
     RM,
 };
 
-const FieldSpec = struct { name: FieldName, length: u8 };
+const FieldSpec = struct { name: FieldName, bitSize: u8 };
+const LiteralSpec = struct { value: u8, bitSize: u8};
+const TokenSpec = union(enum) { literal: LiteralSpec, field: FieldSpec};
+
+const Spec = struct {
+    opName: t.OperationName,
+    tokenSpec: []const TokenSpec
+};
 
 pub fn fieldBitSize(comptime name: FieldName) comptime_int {
     return switch (name) {
@@ -32,15 +39,46 @@ pub fn FieldType(comptime name: FieldName) type {
     };
 }
 
-const LiteralSpec = struct { value: u8, length: u8 };
-
-const specTable = .{
+const specTable = makeSpec(t.OperationName.MOV, .{
     @as(u6, 0b100010),
     FieldName.D,
     FieldName.W,
     FieldName.MOD,
     FieldName.REG,
     FieldName.RM,
+});
+
+fn makeSpec(comptime name: t.OperationName, comptime spec: anytype) Spec {
+    var tokens: [spec.len]TokenSpec = undefined;
+    inline for (spec, 0..) |s, i| {
+        const to = @TypeOf(s);
+        switch (to) {
+            FieldName => {
+                tokens[i] = TokenSpec{.field = FieldSpec{ .name = s, .bitSize = fieldBitSize(s)}};
+            },
+            u1, u2, u3, u4, u5, u6, u7, u8 => {
+                tokens[i] = TokenSpec{.literal = LiteralSpec{ .value = s, .bitSize = @bitSizeOf(to)}};
+            },
+            else => unreachable
+        }
+    }
+    
+    const finalTokens = tokens;
+    return Spec{
+        .opName = name,
+        .tokenSpec = finalTokens[0..],
+    };
+}
+
+const specs = [_]Spec{
+    makeSpec(t.OperationName.MOV, .{
+        @as(u6, 0b100010),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+    }),
 };
 
 // In memory representations of decoded bits
@@ -80,20 +118,20 @@ const CapturedBits = struct {
 
 const DecodeBytesError = error{ NotEnoughBytes, SpecDoesNotMatch };
 
-pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
+pub fn decodeBytes(comptime spec: Spec, bytes: []u8) !CapturedBits {
     var captured = CapturedBits.init();
     var bitCursor: usize = 0;
 
-    inline for (spec, 0..) |s, i| {
-        const bitSize = switch (@TypeOf(s)) {
-            FieldName => fieldBitSize(s),
-            else => @bitSizeOf(@TypeOf(s)),
-        };
-
+    inline for (spec.tokenSpec) |ts| {
         const byteOffset: u8 = @intCast(bitCursor / 8);
         if (bytes.len < byteOffset) {
             return DecodeBytesError.NotEnoughBytes;
         }
+        
+        const bitSize = switch (ts) {
+            .literal => |l| l.bitSize,
+            .field => |f| f.bitSize,
+        };
 
         const bitOffset: u8 = @truncate(bitCursor % 8);
         const bitShift: u3 = @truncate(8 - bitOffset - bitSize);
@@ -114,21 +152,20 @@ pub fn decodeBytes(comptime spec: anytype, bytes: []u8) !CapturedBits {
         const byte = bytes[byteOffset];
         const bits: u8 = (byte >> bitShift) & bitMask;
 
-        switch (@TypeOf(s)) {
-            FieldName => captured.setBitsField(s, bits),
-            else => {
-                const bitsInt: u8 = @intCast(s); 
-                if (bitsInt != bits) {
+        switch (ts) {
+        // if we are currently evaluation a field token, capture the bits
+            .field => |f| captured.setBitsField(f.name, bits),
+        // if we are currently evaluation a literal token, check bits against spec
+            .literal => |l| {
+                if (l.value != bits) {
                     std.log.err(
                         "{!}: Unexpected bits, did not encounter pattern {b}",
-                        .{DecodeBytesError.SpecDoesNotMatch, s}
+                        .{DecodeBytesError.SpecDoesNotMatch, l.value}
                     );
                     return DecodeBytesError.SpecDoesNotMatch;
                 }
             },
         }
-
-        std.log.info("captured i:{d} boff:{d} size:{d} shift:{d} mask:{d} bits:{b:0>8}", .{ i, byteOffset, bitSize, bitShift, bitMaskSize, bits });
 
         bitCursor += bitSize;
     }
