@@ -9,9 +9,10 @@ const FieldName = enum {
     MOD,
     REG,
     RM,
+    DATA,
 };
 
-const FieldSpec = struct { name: FieldName, bitSize: u8 };
+const FieldSpec = struct { name: FieldName };
 const LiteralSpec = struct { value: u8, bitSize: u8};
 const TokenSpec = union(enum) { literal: LiteralSpec, field: FieldSpec};
 
@@ -20,18 +21,19 @@ const Spec = struct {
     tokenSpec: []const TokenSpec
 };
 
-pub fn fieldBitSize(comptime name: FieldName) comptime_int {
+pub fn maxFieldBitSize(comptime name: FieldName) comptime_int {
     return switch (name) {
         FieldName.D => 1,
         FieldName.W => 1,
         FieldName.MOD => 2,
         FieldName.REG => 3,
         FieldName.RM => 3,
+        FieldName.DATA => 16,
     };
 }
 
 pub fn FieldType(comptime name: FieldName) type {
-    return switch (fieldBitSize(name)) {
+    return switch (maxFieldBitSize(name)) {
         1 => u1,
         2 => u2,
         3 => u3,
@@ -48,22 +50,23 @@ const specTable = makeSpec(t.OperationName.MOV, .{
     FieldName.RM,
 });
 
-fn makeSpec(comptime name: t.OperationName, comptime spec: anytype) Spec {
-    var tokens: [spec.len]TokenSpec = undefined;
-    inline for (spec, 0..) |s, i| {
-        const to = @TypeOf(s);
+fn makeSpec(comptime name: t.OperationName, comptime fields: anytype) Spec {
+    var tokens: [fields.len]TokenSpec = undefined;
+    inline for (fields, 0..) |f, i| {
+        const to = @TypeOf(f);
         switch (to) {
             FieldName => {
-                tokens[i] = TokenSpec{.field = FieldSpec{ .name = s, .bitSize = fieldBitSize(s)}};
+                tokens[i] = TokenSpec{.field = FieldSpec{ .name = f }};
             },
             u1, u2, u3, u4, u5, u6, u7, u8 => {
-                tokens[i] = TokenSpec{.literal = LiteralSpec{ .value = s, .bitSize = @bitSizeOf(to)}};
+                tokens[i] = TokenSpec{.literal = LiteralSpec{ .value = f, .bitSize = @bitSizeOf(to)}};
             },
             else => unreachable
         }
     }
     
     const finalTokens = tokens;
+    
     return Spec{
         .opName = name,
         .tokenSpec = finalTokens[0..],
@@ -79,6 +82,15 @@ const specs = [_]Spec{
         FieldName.REG,
         FieldName.RM,
     }),
+    makeSpec(t.OperationName.MOV, .{
+        @as(u6, 0b100010),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DATA,
+    })
 };
 
 // In memory representations of decoded bits
@@ -89,16 +101,20 @@ const CapturedBits = struct {
     MOD: ?FieldType(FieldName.MOD),
     REG: ?FieldType(FieldName.REG),
     RM: ?FieldType(FieldName.RM),
+    DATA: ?FieldType(FieldName.DATA),
     
+    opName: t.OperationName,
     bytesRead: usize,
     
-    pub fn init() CapturedBits {
+    pub fn init(opName: t.OperationName) CapturedBits {
         return CapturedBits{
             .D = null, 
             .W = null, 
             .MOD = null,
             .REG = null,
             .RM = null,
+            .DATA = null,
+            .opName = opName,
             .bytesRead = 0,
         };
     }
@@ -110,27 +126,38 @@ const CapturedBits = struct {
             FieldName.MOD => this.MOD = @intCast(value),
             FieldName.REG => this.REG = @intCast(value),
             FieldName.RM => this.RM = @intCast(value),
+            FieldName.DATA => this.DATA = @intCast(value),
         }
     }
 };
 
 // Decoding logic
 
-const DecodeBytesError = error{ NotEnoughBytes, SpecDoesNotMatch };
+const AttemptDecodeError = error{ NotEnoughBytes, SpecDoesNotMatch, InvalidSpec };
 
-pub fn decodeBytes(comptime spec: Spec, bytes: []u8) !CapturedBits {
-    var captured = CapturedBits.init();
+pub fn attemptDecode(comptime spec: Spec, bytes: []u8) !CapturedBits {
+    var captured = CapturedBits.init(spec.opName);
     var bitCursor: usize = 0;
 
     inline for (spec.tokenSpec) |ts| {
         const byteOffset: u8 = @intCast(bitCursor / 8);
         if (bytes.len < byteOffset) {
-            return DecodeBytesError.NotEnoughBytes;
+            return AttemptDecodeError.NotEnoughBytes;
         }
         
-        const bitSize = switch (ts) {
+        const bitSize: u8 = switch (ts) {
             .literal => |l| l.bitSize,
-            .field => |f| f.bitSize,
+            .field => |f| 
+                // Some fields have a conditional size based on what was captured..
+                // .. for these fields we determine the length here at runtime.
+                switch (f.name) {
+                    FieldName.DATA =>
+                        switch (captured.W orelse unreachable) {
+                            0b0 => 8,
+                            0b1 => 16,
+                        },
+                    else => maxFieldBitSize(f.name),
+                },
         };
 
         const bitOffset: u8 = @truncate(bitCursor % 8);
@@ -160,9 +187,9 @@ pub fn decodeBytes(comptime spec: Spec, bytes: []u8) !CapturedBits {
                 if (l.value != bits) {
                     std.log.err(
                         "{!}: Unexpected bits, did not encounter pattern {b}",
-                        .{DecodeBytesError.SpecDoesNotMatch, l.value}
+                        .{AttemptDecodeError.SpecDoesNotMatch, l.value}
                     );
-                    return DecodeBytesError.SpecDoesNotMatch;
+                    return AttemptDecodeError.SpecDoesNotMatch;
                 }
             },
         }
@@ -238,21 +265,37 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     return inst;
 }
 
+const decodeStreamError = error { ExtraBytesFound };
+
 pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction {
-    
     var bytesRead: usize = 0;
     var endOfStream = false;
-    var captured: CapturedBits = undefined;
+    var captured: ?CapturedBits = null;
     var inst: t.Instruction = undefined;
     var result = std.ArrayList(t.Instruction).init(allocator);
     
     while(!endOfStream) {
-        captured = try decodeBytes(specTable, memory[bytesRead..]);
-        inst = try decodeCapturedBits(captured);
+        // Some dirty code here because of comptime stuff..
+        // .. have another go at this later  
+        inline for (specs) |spec|{
+            if(captured != null) break;
+            captured = attemptDecode(spec, memory[bytesRead..]) catch null;
+        }
+        
+        if(captured == null) {
+            std.log.err(
+                "{!}: Unexpected bytes found, spec table invalid or incomplete",
+                .{decodeStreamError.ExtraBytesFound}
+            );
+            break;
+        }
+        const sureCapture = captured orelse unreachable;
+        inst = try decodeCapturedBits(sureCapture);
         try result.append(inst);
         
-        bytesRead += captured.bytesRead;
+        bytesRead += sureCapture.bytesRead;
         endOfStream = memory.len <= bytesRead;
+        captured = null;
     }
     
     return result.toOwnedSlice();
