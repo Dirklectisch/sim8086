@@ -152,7 +152,7 @@ pub fn attemptDecode(comptime spec: Spec, bytes: []u8) !CapturedBits {
                 // .. for these fields we determine the length here at runtime.
                 switch (f.name) {
                     FieldName.DATA =>
-                        switch (captured.W orelse unreachable) {
+                        switch (captured.W orelse return AttemptDecodeError.InvalidSpec) {
                             0b0 => 8,
                             0b1 => 16,
                         },
