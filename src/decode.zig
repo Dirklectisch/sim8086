@@ -21,7 +21,7 @@ const Spec = struct {
     tokenSpec: []const TokenSpec
 };
 
-pub fn maxFieldBitSize(comptime name: FieldName) comptime_int {
+pub fn maxFieldBitSize(name: FieldName) u8 {
     return switch (name) {
         FieldName.D => 1,
         FieldName.W => 1,
@@ -32,7 +32,7 @@ pub fn maxFieldBitSize(comptime name: FieldName) comptime_int {
     };
 }
 
-pub fn FieldType(comptime name: FieldName) type {
+pub fn FieldType(name: FieldName) type {
     return switch (maxFieldBitSize(name)) {
         1 => u1,
         2 => u2,
@@ -135,11 +135,11 @@ const CapturedBits = struct {
 
 const AttemptDecodeError = error{ NotEnoughBytes, SpecDoesNotMatch, InvalidSpec };
 
-pub fn attemptDecode(comptime spec: Spec, bytes: []u8) !CapturedBits {
+pub fn attemptDecode(spec: Spec, bytes: []u8) !CapturedBits {
     var captured = CapturedBits.init(spec.opName);
     var bitCursor: usize = 0;
 
-    inline for (spec.tokenSpec) |ts| {
+    for (spec.tokenSpec) |ts| {
         const byteOffset: u8 = @intCast(bitCursor / 8);
         if (bytes.len < byteOffset) {
             return AttemptDecodeError.NotEnoughBytes;
@@ -203,7 +203,7 @@ pub fn attemptDecode(comptime spec: Spec, bytes: []u8) !CapturedBits {
     return captured;
 }
 
-// Transform captured bits into structions
+// Transform captured bits into instructions
 
 fn findRegister(wide: u1, reg: u3) t.Register {
     return switch (wide) {
@@ -275,11 +275,14 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
     var result = std.ArrayList(t.Instruction).init(allocator);
     
     while(!endOfStream) {
-        // Some dirty code here because of comptime stuff..
-        // .. have another go at this later  
-        inline for (specs) |spec|{
-            if(captured != null) break;
-            captured = attemptDecode(spec, memory[bytesRead..]) catch null;
+        for (specs) |spec|{
+            captured = attemptDecode(spec, memory[bytesRead..]) catch {
+                // If are unable to decode the next few bytes using this spec ..
+                // .. continue with the next
+                continue;
+            };
+            // If we found a match break out of the loop
+            break;
         }
         
         if(captured == null) {
@@ -290,7 +293,15 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
             break;
         }
         const sureCapture = captured orelse unreachable;
-        inst = try decodeCapturedBits(sureCapture);
+        inst = decodeCapturedBits(sureCapture) catch |err| {
+            std.log.err(
+                "{!}: Decoded bit tokens but failed to traslate into instruction",
+                .{err}
+            );
+            captured = null;
+            continue;
+        };
+        
         try result.append(inst);
         
         bytesRead += sureCapture.bytesRead;
