@@ -11,6 +11,7 @@ const FieldName = enum {
     REG,
     RM,
     DATA,
+    DISP
 };
 
 const FieldSpec = struct { name: FieldName };
@@ -94,6 +95,7 @@ const CapturedBits = struct {
     REG: ?u3,
     RM: ?u3,
     DATA: ?u16,
+    DISP: ?u16,
     
     opName: t.OperationName,
     bytesRead: usize,
@@ -106,6 +108,7 @@ const CapturedBits = struct {
             .REG = null,
             .RM = null,
             .DATA = null,
+            .DISP = null,
             .opName = opName,
             .bytesRead = 0,
         };
@@ -147,6 +150,13 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
                         switch (captured.W orelse return AttemptDecodeError.InvalidSpec) {
                             0b0 => 8,
                             0b1 => 16,
+                        },
+                    FieldName.DISP =>
+                        switch (captured.MOD orelse return AttemptDecodeError.InvalidSpec) {
+                            0b00 => 0,
+                            0b01 => 8,
+                            0b10 => 16,
+                            0b11 => 0,
                         },
                     else => maxFieldBitSize(f.name),
                 },
