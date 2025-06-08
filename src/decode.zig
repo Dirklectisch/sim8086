@@ -1,5 +1,6 @@
 const std = @import("std");
 const t = @import("types.zig");
+const expect = std.testing.expect;
 
 // Declarative reader specifications
 
@@ -29,15 +30,6 @@ pub fn maxFieldBitSize(name: FieldName) u8 {
         FieldName.REG => 3,
         FieldName.RM => 3,
         FieldName.DATA => 16,
-    };
-}
-
-pub fn FieldType(name: FieldName) type {
-    return switch (maxFieldBitSize(name)) {
-        1 => u1,
-        2 => u2,
-        3 => u3,
-        else => u8
     };
 }
 
@@ -96,12 +88,12 @@ const specs = [_]Spec{
 // In memory representations of decoded bits
 
 const CapturedBits = struct {
-    D: ?FieldType(FieldName.D),
-    W: ?FieldType(FieldName.W),
-    MOD: ?FieldType(FieldName.MOD),
-    REG: ?FieldType(FieldName.REG),
-    RM: ?FieldType(FieldName.RM),
-    DATA: ?FieldType(FieldName.DATA),
+    D: ?u1,
+    W: ?u1,
+    MOD: ?u2,
+    REG: ?u3,
+    RM: ?u3,
+    DATA: ?u16,
     
     opName: t.OperationName,
     bytesRead: usize,
@@ -119,7 +111,7 @@ const CapturedBits = struct {
         };
     }
 
-    pub fn setBitsField(this: *CapturedBits, field: FieldName, value: u8) void {
+    pub fn setBitsField(this: *CapturedBits, field: FieldName, value: u16) void {
         switch (field) {
             FieldName.D => this.D = @intCast(value),
             FieldName.W => this.W = @intCast(value),
@@ -135,7 +127,7 @@ const CapturedBits = struct {
 
 const AttemptDecodeError = error{ NotEnoughBytes, SpecDoesNotMatch, InvalidSpec };
 
-pub fn attemptDecode(spec: Spec, bytes: []u8) !CapturedBits {
+pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
     var captured = CapturedBits.init(spec.opName);
     var bitCursor: usize = 0;
 
@@ -159,26 +151,54 @@ pub fn attemptDecode(spec: Spec, bytes: []u8) !CapturedBits {
                     else => maxFieldBitSize(f.name),
                 },
         };
+        var bits: u16 = undefined;
+        
+        const isWholeBytes = (bitSize % 8) == 0;
+        if (isWholeBytes) {
+            // Tokens of a full byte or larger are always whole bytes..
+            // .. and also start on the first bit of a byte
+            const amountOfBytes = bitSize / 8;
+            const upTo = byteOffset + amountOfBytes;
+            const byteSlice = bytes[byteOffset..upTo];
+            switch (amountOfBytes) {
+                1 => {
+                    bits = std.mem.readInt(u8, byteSlice[0..1], .big);
+                },
+                2 => {
+                    bits = std.mem.readInt(u16, byteSlice[0..2], .big);
+                },
+                else => {
+                    std.log.err(
+                        "{!}: Invalid bitsize in spec {d}",
+                        .{AttemptDecodeError.InvalidSpec, bitSize}
+                    );
+                    return AttemptDecodeError.InvalidSpec;
+                }
+            }
+        }
 
-        const bitOffset: u8 = @truncate(bitCursor % 8);
-        const bitShift: u3 = @truncate(8 - bitOffset - bitSize);
-        const bitMaskSize: u8 = 8 - bitSize;
-        const bitMask: u8 = switch (bitMaskSize) {
-            0 => 0b11111111,
-            1 => 0b01111111,
-            2 => 0b00111111,
-            3 => 0b00011111,
-            4 => 0b00001111,
-            5 => 0b00000111,
-            6 => 0b00000011,
-            7 => 0b00000001,
-            8 => 0b00000000,
-            else => unreachable,
-        };
+        const isPartialByte = bitSize < 8;
+        if (isPartialByte) {
+            const bitOffset: u8 = @truncate(bitCursor % 8);
+            const bitShift: u3 = @truncate(8 - bitOffset - bitSize);
+            const bitMaskSize: u8 = 8 - bitSize;
+            const bitMask: u8 = switch (bitMaskSize) {
+                0 => 0b11111111,
+                1 => 0b01111111,
+                2 => 0b00111111,
+                3 => 0b00011111,
+                4 => 0b00001111,
+                5 => 0b00000111,
+                6 => 0b00000011,
+                7 => 0b00000001,
+                8 => 0b00000000,
+                else => unreachable,
+            };
 
-        const byte = bytes[byteOffset];
-        const bits: u8 = (byte >> bitShift) & bitMask;
-
+            const byte = bytes[byteOffset];
+            bits = (byte >> bitShift) & bitMask;
+        }
+        
         switch (ts) {
         // if we are currently evaluation a field token, capture the bits
             .field => |f| captured.setBitsField(f.name, bits),
@@ -201,6 +221,38 @@ pub fn attemptDecode(spec: Spec, bytes: []u8) !CapturedBits {
     captured.bytesRead = @intFromFloat(@ceil(bitCursorFloat / 8)); 
 
     return captured;
+}
+
+test "Endianess in standard library readInt function" {
+    // This test is just here for clarifying how reading ints from the byte streams works
+    // Leaving it here in case my future self needs a refresher
+    
+    try expect(std.mem.readInt(u8, &[_]u8{0b00000001}, .little) == 1);
+    try expect(std.mem.readInt(u8, &[_]u8{0b00000001}, .big) == 1);
+    try expect(std.mem.readInt(u16, &[_]u8{0b00000000, 0b00000001}, .big) == 1);
+    try expect(std.mem.readInt(u16, &[_]u8{0b00000000, 0b00000001}, .little) != 1);
+}
+
+test "Test handling of multiple bytes capture" {
+    const oneByteDataSpec = makeSpec(t.OperationName.MOV, .{
+        @as(u7, 0b1111111),
+        FieldName.W,
+        FieldName.DATA,
+    });
+
+    const example = [2]u8{0b11111110, 0b10101010};
+    const capture = try attemptDecode(oneByteDataSpec, example[0..]);
+    try expect(capture.DATA == @as(u16, 0b00000000_10101010));
+
+    const twoByteSpec = makeSpec(t.OperationName.MOV, .{
+        @as(u7, 0b0000000),
+        FieldName.W,
+        FieldName.DATA,
+    });
+
+    const exampleTwo = [3]u8{0b00000001, 0b10101010, 0b11111111};
+    const captureTwo = try attemptDecode(twoByteSpec, exampleTwo[0..]);
+    try expect(captureTwo.DATA == @as(u16, 0b10101010_11111111));
 }
 
 // Transform captured bits into instructions
