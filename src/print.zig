@@ -18,7 +18,7 @@ pub fn printOperand(operand: t.Operand, w: anytype) !void {
 pub fn printInstr(inst: t.Instruction, w: anytype) !void { 
     try printOperationName(inst.name, w);
     try w.print(" ", .{});
-    try printOperand(inst.destination, w);
+    try printOperand(inst.dest, w);
     try w.print(", ", .{});
     try printOperand(inst.source, w);
     try w.print("\n", .{});

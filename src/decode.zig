@@ -31,6 +31,7 @@ pub fn maxFieldBitSize(name: FieldName) u8 {
         FieldName.REG => 3,
         FieldName.RM => 3,
         FieldName.DATA => 16,
+        FieldName.DISP => 16,
     };
 }
 
@@ -122,6 +123,7 @@ const CapturedBits = struct {
             FieldName.REG => this.REG = @intCast(value),
             FieldName.RM => this.RM = @intCast(value),
             FieldName.DATA => this.DATA = @intCast(value),
+            FieldName.DISP => this.DISP = @intCast(value),
         }
     }
 };
@@ -295,33 +297,51 @@ fn findRegister(wide: u1, reg: u3) t.Register {
 const DecodeCapturedBitsError = error{ UnrecognizedBits };
 
 fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
-    const bitsW  = bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits;
-    const bitsREG  = bits.REG orelse return DecodeCapturedBitsError.UnrecognizedBits;
-    
-    const regOperand = t.OperandRegister{
-        .target = findRegister(bitsW, bitsREG),
-    };
-    
-    const bitsD  = bits.D orelse return DecodeCapturedBitsError.UnrecognizedBits;
     var inst = t.Instruction {
         .name = t.OperationName.MOV,
-        .destination = undefined,
+        .dest = undefined,
         .source = undefined
-    }; 
-    
-    switch (bitsD) {
-        0b0 => inst.source.REGISTER = regOperand,
-        0b1 => inst.destination.REGISTER = regOperand,
-    }
-
-    const bitsRM  = bits.RM orelse return DecodeCapturedBitsError.UnrecognizedBits;
-    const rmOperand = t.OperandRegister{
-        .target = findRegister(bitsW, bitsRM),
     };
-
-    switch (bitsD) {
-        0b0 => inst.destination.REGISTER = rmOperand,
-        0b1 => inst.source.REGISTER = rmOperand,
+    
+    const hasReg = bits.REG != null;
+    var regOperand: t.Operand = undefined;
+    if (hasReg) {
+        const bitsW = bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits;
+        const reg = findRegister(bitsW, bits.REG.?);
+        const operand = t.OperandRegister{.target = reg};
+        regOperand = t.Operand{.REGISTER = operand};
+    }
+    
+    const hasRM = bits.REG != null;
+    var rmOperand: t.Operand = undefined;
+    if (hasRM) {
+        const bitsMOD = bits.MOD orelse return DecodeCapturedBitsError.UnrecognizedBits;
+        switch (bitsMOD) {
+            0b00 => unreachable,
+            0b01 => unreachable,
+            0b10 => unreachable,
+            0b11 => {
+                const bitsW = bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits;
+                const reg = findRegister(bitsW, bits.RM.?);
+                const operand = t.OperandRegister{.target = reg};
+                rmOperand = t.Operand{.REGISTER = operand};
+            },
+        }
+    }
+    
+    const hasD = bits.D != null;
+    if (hasD) {
+        if(!hasReg or !hasRM) return DecodeCapturedBitsError.UnrecognizedBits;
+        switch (bits.D.?) {
+            0b0 => {
+                inst.source = regOperand;
+                inst.dest = rmOperand;
+            },
+            0b1 => {
+                inst.dest = regOperand;
+                inst.source = rmOperand;
+            },
+        }
     }
     
     return inst;
