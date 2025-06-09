@@ -89,14 +89,16 @@ const specs = [_]Spec{
 
 // In memory representations of decoded bits
 
+const MultiByte = union (enum) { one: u8, two: u16 };
+
 const CapturedBits = struct {
     D: ?u1,
     W: ?u1,
     MOD: ?u2,
     REG: ?u3,
     RM: ?u3,
-    DATA: ?u16,
-    DISP: ?u16,
+    DATA: ?MultiByte,
+    DISP: ?MultiByte,
     
     opName: t.OperationName,
     bytesRead: usize,
@@ -122,8 +124,21 @@ const CapturedBits = struct {
             FieldName.MOD => this.MOD = @intCast(value),
             FieldName.REG => this.REG = @intCast(value),
             FieldName.RM => this.RM = @intCast(value),
-            FieldName.DATA => this.DATA = @intCast(value),
-            FieldName.DISP => this.DISP = @intCast(value),
+            else => {
+                std.log.err("Can not set multi byte field, use setBytesField instead.", .{});
+                unreachable;
+            }
+        }
+    }
+    
+    pub fn setBytesField(this: *CapturedBits, field: FieldName, value: MultiByte) void {
+        switch (field) {
+            FieldName.DATA => this.DATA = value,
+            FieldName.DISP => this.DISP = value,
+            else => {
+                std.log.err("Can not set bit field, use setBitsField instead.", .{});
+                unreachable;
+            }
         }
     }
 };
@@ -163,7 +178,6 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
                     else => maxFieldBitSize(f.name),
                 },
         };
-        var bits: u16 = undefined;
         
         const isWholeBytes = (bitSize % 8) == 0;
         if (isWholeBytes) {
@@ -174,10 +188,12 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
             const byteSlice = bytes[byteOffset..upTo];
             switch (amountOfBytes) {
                 1 => {
-                    bits = std.mem.readInt(u8, byteSlice[0..1], .big);
+                    const oneByte: u8 = std.mem.readInt(u8, byteSlice[0..1], .big);
+                    captured.setBytesField(ts.field.name, MultiByte{ .one = oneByte });
                 },
                 2 => {
-                    bits = std.mem.readInt(u16, byteSlice[0..2], .big);
+                    const twoBytes = std.mem.readInt(u16, byteSlice[0..2], .big);
+                    captured.setBytesField(ts.field.name, MultiByte{ .two = twoBytes });
                 },
                 else => {
                     std.log.err(
@@ -187,10 +203,14 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
                     return AttemptDecodeError.InvalidSpec;
                 }
             }
+
+            bitCursor += bitSize;
+            continue;
         }
 
         const isPartialByte = bitSize < 8;
         if (isPartialByte) {
+            var bits: u8 = undefined;
             const bitOffset: u8 = @truncate(bitCursor % 8);
             const bitShift: u3 = @truncate(8 - bitOffset - bitSize);
             const bitMaskSize: u8 = 8 - bitSize;
@@ -209,24 +229,20 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
 
             const byte = bytes[byteOffset];
             bits = (byte >> bitShift) & bitMask;
-        }
-        
-        switch (ts) {
-        // if we are currently evaluation a field token, capture the bits
-            .field => |f| captured.setBitsField(f.name, bits),
-        // if we are currently evaluation a literal token, check bits against spec
-            .literal => |l| {
-                if (l.value != bits) {
-                    std.log.err(
-                        "{!}: Unexpected bits, did not encounter pattern {b}",
-                        .{AttemptDecodeError.SpecDoesNotMatch, l.value}
-                    );
-                    return AttemptDecodeError.SpecDoesNotMatch;
-                }
-            },
-        }
 
-        bitCursor += bitSize;
+            switch (ts) {
+            // if we are currently evaluation a field token, capture the bits
+            .field => |f| captured.setBitsField(f.name, bits),
+                // if we are currently evaluation a literal token, check bits against spec
+            .literal => |l| {
+                    if (l.value != bits) {
+                        return AttemptDecodeError.SpecDoesNotMatch;
+                    }
+                },
+            }
+
+            bitCursor += bitSize;
+        }
     }
     
     const bitCursorFloat: f16 = @floatFromInt(bitCursor);
@@ -296,6 +312,13 @@ fn findRegister(wide: u1, reg: u3) t.Register {
 
 const DecodeCapturedBitsError = error{ UnrecognizedBits };
 
+fn makeRegOperand(wide: ?u1, reg: u3) !t.Operand {
+    const sureWide = wide orelse return DecodeCapturedBitsError.UnrecognizedBits;
+    const register = findRegister(sureWide, reg);
+    const operandRegister = t.OperandRegister{.target = register};
+    return t.Operand{ .REGISTER = operandRegister };
+}
+
 fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     var inst = t.Instruction {
         .name = t.OperationName.MOV,
@@ -306,10 +329,7 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     const hasReg = bits.REG != null;
     var regOperand: t.Operand = undefined;
     if (hasReg) {
-        const bitsW = bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits;
-        const reg = findRegister(bitsW, bits.REG.?);
-        const operand = t.OperandRegister{.target = reg};
-        regOperand = t.Operand{.REGISTER = operand};
+        regOperand = try makeRegOperand(bits.W, bits.REG.?);
     }
     
     const hasRM = bits.REG != null;
@@ -321,10 +341,7 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
             0b01 => unreachable,
             0b10 => unreachable,
             0b11 => {
-                const bitsW = bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits;
-                const reg = findRegister(bitsW, bits.RM.?);
-                const operand = t.OperandRegister{.target = reg};
-                rmOperand = t.Operand{.REGISTER = operand};
+                rmOperand = try makeRegOperand(bits.W, bits.RM.?);
             },
         }
     }
@@ -343,6 +360,12 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
             },
         }
     }
+
+    // const hasData = bits.DATA != null;
+    // var data: i16 = undefined;
+    // if (hasData) {
+    //     data = @bitCast(bits.DATA.?);
+    // }
     
     return inst;
 }
@@ -374,7 +397,7 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
             );
             break;
         }
-        const sureCapture = captured orelse unreachable;
+        const sureCapture = captured.?;
         inst = decodeCapturedBits(sureCapture) catch |err| {
             std.log.err(
                 "{!}: Decoded bit tokens but failed to traslate into instruction",
