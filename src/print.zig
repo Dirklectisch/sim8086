@@ -8,11 +8,22 @@ pub fn printOperationName(name: t.OperationName, w: anytype) !void {
     try w.print("{s}", .{lower});
 }
 
-pub fn printOperand(operand: t.Operand, w: anytype) !void {
+pub fn printRegisterOperand(operand: t.OperandRegister, w: anytype) !void {
     var lower: [2]u8 = undefined;
-    _ = std.ascii.lowerString(&lower, @tagName(operand.REGISTER.target));
+    _ = std.ascii.lowerString(&lower, @tagName(operand.target));
     
     try w.print("{s}", .{lower});
+}
+
+pub fn printImmediateOperand(operand: t.OperandImmediate, w: anytype) !void {
+    try w.print("{d}", .{operand.value});
+}
+
+pub fn printOperand(operand: t.Operand, w: anytype) !void {
+    switch (operand) {
+        .REGISTER => try printRegisterOperand(operand.REGISTER, w),
+        .IMMEDIATE => try printImmediateOperand(operand.IMMEDIATE, w),
+    }
 }
 
 pub fn printInstr(inst: t.Instruction, w: anytype) !void { 

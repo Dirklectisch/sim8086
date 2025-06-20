@@ -75,16 +75,23 @@ const specs = [_]Spec{
         FieldName.MOD,
         FieldName.REG,
         FieldName.RM,
+        FieldName.DISP
     }),
     makeSpec(t.OperationName.MOV, .{
-        @as(u6, 0b100010),
-        FieldName.D,
+        @as(u7, 0b1100011),
         FieldName.W,
         FieldName.MOD,
-        FieldName.REG,
+        @as(u3, 0b000),
         FieldName.RM,
+        FieldName.DISP,
         FieldName.DATA,
-    })
+    }),
+    makeSpec(t.OperationName.MOV, .{
+        @as(u4, 0b1011),
+        FieldName.W,
+        FieldName.REG,
+        FieldName.DATA,
+    }),
 };
 
 // In memory representations of decoded bits
@@ -179,10 +186,16 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
                 },
         };
         
+        const noBytes = bitSize == 0;
+        if(noBytes) {
+            continue;
+        }
+        
         const isWholeBytes = (bitSize % 8) == 0;
         if (isWholeBytes) {
             // Tokens of a full byte or larger are always whole bytes..
             // .. and also start on the first bit of a byte
+            // .. and also are always one or two bytes long
             const amountOfBytes = bitSize / 8;
             const upTo = byteOffset + amountOfBytes;
             const byteSlice = bytes[byteOffset..upTo];
@@ -320,6 +333,8 @@ fn makeRegOperand(wide: ?u1, reg: u3) !t.Operand {
 }
 
 fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
+    std.log.debug("start to decode captured bits {any}", .{bits});
+    
     var inst = t.Instruction {
         .name = t.OperationName.MOV,
         .dest = undefined,
@@ -332,14 +347,14 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
         regOperand = try makeRegOperand(bits.W, bits.REG.?);
     }
     
-    const hasRM = bits.REG != null;
+    const hasRM = bits.RM != null;
     var rmOperand: t.Operand = undefined;
     if (hasRM) {
         const bitsMOD = bits.MOD orelse return DecodeCapturedBitsError.UnrecognizedBits;
         switch (bitsMOD) {
-            0b00 => unreachable,
-            0b01 => unreachable,
-            0b10 => unreachable,
+            0b00 => return DecodeCapturedBitsError.UnrecognizedBits,
+            0b01 => return DecodeCapturedBitsError.UnrecognizedBits,
+            0b10 => return DecodeCapturedBitsError.UnrecognizedBits,
             0b11 => {
                 rmOperand = try makeRegOperand(bits.W, bits.RM.?);
             },
@@ -360,12 +375,27 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
             },
         }
     }
-
-    // const hasData = bits.DATA != null;
-    // var data: i16 = undefined;
-    // if (hasData) {
-    //     data = @bitCast(bits.DATA.?);
-    // }
+    
+    const hasData = bits.DATA != null;
+    var immediateOperand: t.Operand = undefined;
+    if (hasData) {
+        var data: i16 = undefined;
+        switch (bits.DATA.?) {
+            .one => |byte| {
+                const signed: i8 = @bitCast(byte);
+                data = signed;
+            },
+            .two => |bytes| {
+                data = @bitCast(bytes);
+            }
+        }
+        immediateOperand = t.Operand{ .IMMEDIATE = t.OperandImmediate{ .value = data }};
+    }
+    
+    if(hasReg and hasData) {
+        inst.dest = regOperand;
+        inst.source = immediateOperand;
+    }
     
     return inst;
 }
@@ -376,7 +406,7 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
     var bytesRead: usize = 0;
     var endOfStream = false;
     var captured: ?CapturedBits = null;
-    var inst: t.Instruction = undefined;
+    var inst: ?t.Instruction = null;
     var result = std.ArrayList(t.Instruction).init(allocator);
     
     while(!endOfStream) {
@@ -398,16 +428,16 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
             break;
         }
         const sureCapture = captured.?;
-        inst = decodeCapturedBits(sureCapture) catch |err| {
-            std.log.err(
-                "{!}: Decoded bit tokens but failed to traslate into instruction",
-                .{err}
-            );
-            captured = null;
-            continue;
-        };
         
-        try result.append(inst);
+        inst = decodeCapturedBits(sureCapture) catch null;
+        if (inst != null) {
+            try result.append(inst.?);
+        } else {
+            std.log.err(
+                "Decoded bit tokens but failed to traslate into instruction",
+                .{}
+            );
+        }
         
         bytesRead += sureCapture.bytesRead;
         endOfStream = memory.len <= bytesRead;
