@@ -96,16 +96,14 @@ const specs = [_]Spec{
 
 // In memory representations of decoded bits
 
-const MultiByte = union (enum) { one: u8, two: u16 };
-
 const CapturedBits = struct {
     D: ?u1,
     W: ?u1,
     MOD: ?u2,
     REG: ?u3,
     RM: ?u3,
-    DATA: ?MultiByte,
-    DISP: ?MultiByte,
+    DATA: ?[]const u8,
+    DISP: ?[]const u8,
     
     opName: t.OperationName,
     bytesRead: usize,
@@ -138,7 +136,7 @@ const CapturedBits = struct {
         }
     }
     
-    pub fn setBytesField(this: *CapturedBits, field: FieldName, value: MultiByte) void {
+    pub fn setBytesField(this: *CapturedBits, field: FieldName, value: []const u8) void {
         switch (field) {
             FieldName.DATA => this.DATA = value,
             FieldName.DISP => this.DISP = value,
@@ -199,24 +197,7 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
             const amountOfBytes = bitSize / 8;
             const upTo = byteOffset + amountOfBytes;
             const byteSlice = bytes[byteOffset..upTo];
-            switch (amountOfBytes) {
-                1 => {
-                    const oneByte: u8 = std.mem.readInt(u8, byteSlice[0..1], .big);
-                    captured.setBytesField(ts.field.name, MultiByte{ .one = oneByte });
-                },
-                2 => {
-                    const twoBytes = std.mem.readInt(u16, byteSlice[0..2], .big);
-                    captured.setBytesField(ts.field.name, MultiByte{ .two = twoBytes });
-                },
-                else => {
-                    std.log.err(
-                        "{!}: Invalid bitsize in spec {d}",
-                        .{AttemptDecodeError.InvalidSpec, bitSize}
-                    );
-                    return AttemptDecodeError.InvalidSpec;
-                }
-            }
-
+            captured.setBytesField(ts.field.name, byteSlice);
             bitCursor += bitSize;
             continue;
         }
@@ -380,13 +361,15 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     var immediateOperand: t.Operand = undefined;
     if (hasData) {
         var data: i16 = undefined;
-        switch (bits.DATA.?) {
-            .one => |byte| {
-                const signed: i8 = @bitCast(byte);
-                data = signed;
+        switch (bits.DATA.?.len) {
+            1 => {
+                data = std.mem.readInt(i8, bits.DATA.?[0..1], .little);
             },
-            .two => |bytes| {
-                data = @bitCast(bytes);
+            2 => {
+                data = std.mem.readInt(i16, bits.DATA.?[0..2], .little);
+            },
+            else => {
+                return DecodeCapturedBitsError.UnrecognizedBits;
             }
         }
         immediateOperand = t.Operand{ .IMMEDIATE = t.OperandImmediate{ .value = data }};
