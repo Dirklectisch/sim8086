@@ -19,10 +19,33 @@ pub fn printImmediateOperand(operand: t.OperandImmediate, w: anytype) !void {
     try w.print("{d}", .{operand.value});
 }
 
+pub fn printAddressOperand(operand: t.OperandAddress, w: anytype) !void {
+    try w.print("[", .{});
+    
+    if(operand.registers[0] != null) {
+        var lower: [2]u8 = undefined;
+        _ = std.ascii.lowerString(&lower, @tagName(operand.registers[0].?));
+        try w.print("{s}", .{lower});
+    }
+
+    if(operand.registers[1] != null) {
+        var lower: [2]u8 = undefined;
+        _ = std.ascii.lowerString(&lower, @tagName(operand.registers[1].?));
+        try w.print(" + {s}", .{lower});
+    }
+
+    if(operand.value != null) {
+        try w.print(" + {d}", .{operand.value.?});
+    }
+
+    try w.print("]", .{});
+}
+
 pub fn printOperand(operand: t.Operand, w: anytype) !void {
     switch (operand) {
         .REGISTER => try printRegisterOperand(operand.REGISTER, w),
         .IMMEDIATE => try printImmediateOperand(operand.IMMEDIATE, w),
+        .ADDRESS => try printAddressOperand(operand.ADDRESS, w),
     }
 }
 

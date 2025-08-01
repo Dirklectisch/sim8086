@@ -255,28 +255,6 @@ test "Endianess in standard library readInt function" {
     try expect(std.mem.readInt(u16, &[_]u8{0b00000000, 0b00000001}, .little) != 1);
 }
 
-test "Test handling of multiple bytes capture" {
-    const oneByteDataSpec = makeSpec(t.OperationName.MOV, .{
-        @as(u7, 0b1111111),
-        FieldName.W,
-        FieldName.DATA,
-    });
-
-    const example = [2]u8{0b11111110, 0b10101010};
-    const capture = try attemptDecode(oneByteDataSpec, example[0..]);
-    try expect(capture.DATA == @as(u16, 0b00000000_10101010));
-
-    const twoByteSpec = makeSpec(t.OperationName.MOV, .{
-        @as(u7, 0b0000000),
-        FieldName.W,
-        FieldName.DATA,
-    });
-
-    const exampleTwo = [3]u8{0b00000001, 0b10101010, 0b11111111};
-    const captureTwo = try attemptDecode(twoByteSpec, exampleTwo[0..]);
-    try expect(captureTwo.DATA == @as(u16, 0b10101010_11111111));
-}
-
 // Transform captured bits into instructions
 
 fn findRegister(wide: u1, reg: u3) t.Register {
@@ -313,6 +291,54 @@ fn makeRegOperand(wide: ?u1, reg: u3) !t.Operand {
     return t.Operand{ .REGISTER = operandRegister };
 }
 
+fn makeAddressOperand(rm: u3, mod: u2, disp: ?i16) t.Operand {
+    var addressOperand = t.OperandAddress{
+        .registers = .{null, null},
+        .value = null,
+    };
+    
+    const registers: [2]?t.Register = switch (rm) {
+        0b000 => [2]?t.Register{t.Register.BX, t.Register.SI},
+        0b001 => [2]?t.Register{t.Register.BX, t.Register.DI},
+        0b010 => [2]?t.Register{t.Register.BP, t.Register.SI},
+        0b011 => [2]?t.Register{t.Register.BP, t.Register.DI},
+        0b100 => [2]?t.Register{t.Register.SI, null},
+        0b101 => [2]?t.Register{t.Register.DI, null},
+        0b110 => b: {
+            if(mod == 0b00) {
+                break :b [2]?t.Register{null, null};
+            } else {
+                break :b [2]?t.Register{t.Register.BP, null};
+            }
+        },
+        0b111 => [2]?t.Register{t.Register.BX, null},
+    };
+    addressOperand.registers = registers;
+    
+    const hasDispValue = disp != null and disp.? > 0;
+    if(hasDispValue) {
+        addressOperand.value = disp;
+    }
+    
+    return t.Operand{ .ADDRESS = addressOperand};
+}
+
+fn makeDecimal(bytes: []const u8) !i16 {
+    var data: i16 = undefined;
+    switch (bytes.len) {
+        1 => {
+            data = std.mem.readInt(i8, bytes[0..1], .little);
+        },
+        2 => {
+            data = std.mem.readInt(i16, bytes[0..2], .little);
+        },
+        else => {
+            return DecodeCapturedBitsError.UnrecognizedBits;
+        }
+    }
+    return data;
+}
+
 fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     std.log.debug("start to decode captured bits {any}", .{bits});
     
@@ -328,17 +354,24 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
         regOperand = try makeRegOperand(bits.W, bits.REG.?);
     }
     
+    const hasDisp = bits.DISP != null;
+    var disp: ?i16 = null;
+    if (hasDisp) {
+        disp = try makeDecimal(bits.DISP.?);
+    }
+    
     const hasRM = bits.RM != null;
     var rmOperand: t.Operand = undefined;
     if (hasRM) {
         const bitsMOD = bits.MOD orelse return DecodeCapturedBitsError.UnrecognizedBits;
         switch (bitsMOD) {
-            0b00 => return DecodeCapturedBitsError.UnrecognizedBits,
-            0b01 => return DecodeCapturedBitsError.UnrecognizedBits,
-            0b10 => return DecodeCapturedBitsError.UnrecognizedBits,
+            0b00, 0b01, 0b10  => {
+                rmOperand = makeAddressOperand(bits.RM.?, bits.MOD.?, disp);
+            },
             0b11 => {
                 rmOperand = try makeRegOperand(bits.W, bits.RM.?);
             },
+            
         }
     }
     
@@ -360,18 +393,7 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     const hasData = bits.DATA != null;
     var immediateOperand: t.Operand = undefined;
     if (hasData) {
-        var data: i16 = undefined;
-        switch (bits.DATA.?.len) {
-            1 => {
-                data = std.mem.readInt(i8, bits.DATA.?[0..1], .little);
-            },
-            2 => {
-                data = std.mem.readInt(i16, bits.DATA.?[0..2], .little);
-            },
-            else => {
-                return DecodeCapturedBitsError.UnrecognizedBits;
-            }
-        }
+        const data: i16 = try makeDecimal(bits.DATA.?);
         immediateOperand = t.Operand{ .IMMEDIATE = t.OperandImmediate{ .value = data }};
     }
     

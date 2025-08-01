@@ -27,7 +27,7 @@ if [ -e "$input_path" ]; then
         zig run src/cli.zig -- $input_path > ./output/$filename.asm
         
         # Diff output file against provided file 
-        diff --ignore-matching-lines='^;' --ignore-blank-lines ./output/listing_0038_many_register_mov.asm ./vendor/computer_enhance/perfaware/part1/$filename.asm
+        diff --ignore-matching-lines='^;' --ignore-blank-lines ./output/$filename.asm ./vendor/computer_enhance/perfaware/part1/$filename.asm
     else
         echo "$input_path is neither a file nor a directory."
     fi

@@ -23,7 +23,8 @@ pub const Register = enum {
 
 pub const OperandType = enum {
     REGISTER,
-    IMMEDIATE
+    IMMEDIATE,
+    ADDRESS
 };
 
 pub const OperandRegister = struct {
@@ -34,9 +35,15 @@ pub const OperandImmediate = struct {
     value: i16
 };
 
+pub const OperandAddress = struct {
+    registers: [2]?Register,
+    value: ?i16,
+};
+
 pub const Operand = union(OperandType) {
     REGISTER: OperandRegister,
-    IMMEDIATE: OperandImmediate
+    IMMEDIATE: OperandImmediate,
+    ADDRESS: OperandAddress
 };
 
 pub const Instruction = struct {
