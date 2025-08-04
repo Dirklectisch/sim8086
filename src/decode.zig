@@ -109,6 +109,54 @@ const specs = [_]Spec{
         FieldName.W,
         FieldName.DATA
     }),
+    makeSpec(t.OperationName.SUB, .{
+        @as(u6, 0b001010),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP
+    }),
+    makeSpec(t.OperationName.SUB, .{
+        @as(u6, 0b100000),
+        FieldName.S,
+        FieldName.W,
+        FieldName.MOD,
+        @as(u3, 0b101),
+        FieldName.RM,
+        FieldName.DISP,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.SUB, .{
+        @as(u7, 0b0010110),
+        FieldName.W,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.CMP, .{
+        @as(u6, 0b001010),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP
+    }),
+    makeSpec(t.OperationName.CMP, .{
+        @as(u6, 0b100000),
+        FieldName.S,
+        FieldName.W,
+        FieldName.MOD,
+        @as(u3, 0b101),
+        FieldName.RM,
+        FieldName.DISP,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.CMP, .{
+        @as(u7, 0b0010110),
+        FieldName.W,
+        FieldName.DATA
+    }),
 };
 
 // In memory representations of decoded bits
