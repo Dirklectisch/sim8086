@@ -1,5 +1,6 @@
 pub const OperationName = enum {
     MOV,
+    ADD, 
 };
 
 pub const Register = enum {

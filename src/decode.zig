@@ -7,6 +7,7 @@ const expect = std.testing.expect;
 const FieldName = enum {
     D,
     W,
+    S,
     MOD,
     REG,
     RM,
@@ -27,6 +28,7 @@ pub fn maxFieldBitSize(name: FieldName) u8 {
     return switch (name) {
         FieldName.D => 1,
         FieldName.W => 1,
+        FieldName.S => 1,
         FieldName.MOD => 2,
         FieldName.REG => 3,
         FieldName.RM => 3,
@@ -34,15 +36,6 @@ pub fn maxFieldBitSize(name: FieldName) u8 {
         FieldName.DISP => 16,
     };
 }
-
-const specTable = makeSpec(t.OperationName.MOV, .{
-    @as(u6, 0b100010),
-    FieldName.D,
-    FieldName.W,
-    FieldName.MOD,
-    FieldName.REG,
-    FieldName.RM,
-});
 
 fn makeSpec(comptime name: t.OperationName, comptime fields: anytype) Spec {
     var tokens: [fields.len]TokenSpec = undefined;
@@ -92,6 +85,30 @@ const specs = [_]Spec{
         FieldName.REG,
         FieldName.DATA,
     }),
+    makeSpec(t.OperationName.ADD, .{
+        @as(u6, 0b000000),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP
+    }),
+    makeSpec(t.OperationName.ADD, .{
+        @as(u6, 0b100000),
+        FieldName.S,
+        FieldName.W,
+        FieldName.MOD,
+        @as(u3, 0b000),
+        FieldName.RM,
+        FieldName.DISP,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.ADD, .{
+        @as(u7, 0b0000010),
+        FieldName.W,
+        FieldName.DATA
+    }),
 };
 
 // In memory representations of decoded bits
@@ -99,6 +116,7 @@ const specs = [_]Spec{
 const CapturedBits = struct {
     D: ?u1,
     W: ?u1,
+    S: ?u1,
     MOD: ?u2,
     REG: ?u3,
     RM: ?u3,
@@ -111,7 +129,8 @@ const CapturedBits = struct {
     pub fn init(opName: t.OperationName) CapturedBits {
         return CapturedBits{
             .D = null, 
-            .W = null, 
+            .W = null,
+            .S = null,
             .MOD = null,
             .REG = null,
             .RM = null,
@@ -126,11 +145,12 @@ const CapturedBits = struct {
         switch (field) {
             FieldName.D => this.D = @intCast(value),
             FieldName.W => this.W = @intCast(value),
+            FieldName.S => this.S = @intCast(value),
             FieldName.MOD => this.MOD = @intCast(value),
             FieldName.REG => this.REG = @intCast(value),
             FieldName.RM => this.RM = @intCast(value),
             else => {
-                std.log.err("Can not set multi byte field, use setBytesField instead.", .{});
+                std.log.err("Can not set field, maybe it is undefined or multi byte.", .{});
                 unreachable;
             }
         }
@@ -168,11 +188,21 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
                 // Some fields have a conditional size based on what was captured..
                 // .. for these fields we determine the length here at runtime.
                 switch (f.name) {
-                    FieldName.DATA =>
-                        switch (captured.W orelse return AttemptDecodeError.InvalidSpec) {
-                            0b0 => 8,
-                            0b1 => 16,
-                        },
+                    FieldName.DATA => b: {
+                        if (captured.W == null) return AttemptDecodeError.InvalidSpec;
+                        if (captured.S != null) {
+                            if (captured.S == 0b0 and captured.W == 0b1) {
+                                break :b 16;
+                            } else {
+                                break :b 8;
+                            }
+                        } else {
+                            break :b switch (captured.W.?) {
+                                0b0 => 8,
+                                0b1 => 16,
+                            };
+                        }
+                    },
                     FieldName.DISP =>
                         switch (captured.MOD orelse return AttemptDecodeError.InvalidSpec) {
                             0b00 => 0,
@@ -343,7 +373,7 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     std.log.debug("start to decode captured bits {any}", .{bits});
     
     var inst = t.Instruction {
-        .name = t.OperationName.MOV,
+        .name = bits.opName,
         .dest = undefined,
         .source = undefined
     };
@@ -371,7 +401,6 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
             0b11 => {
                 rmOperand = try makeRegOperand(bits.W, bits.RM.?);
             },
-            
         }
     }
     
@@ -388,20 +417,18 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
                 inst.source = rmOperand;
             },
         }
+    } else if (hasReg) {
+        inst.dest = regOperand;
+    } else if (hasRM) {
+        inst.dest = rmOperand;
     }
     
     const hasData = bits.DATA != null;
-    var immediateOperand: t.Operand = undefined;
     if (hasData) {
         const data: i16 = try makeDecimal(bits.DATA.?);
-        immediateOperand = t.Operand{ .IMMEDIATE = t.OperandImmediate{ .value = data }};
+        inst.source = t.Operand{ .IMMEDIATE = t.OperandImmediate{ .value = data }};
     }
-    
-    if(hasReg and hasData) {
-        inst.dest = regOperand;
-        inst.source = immediateOperand;
-    }
-    
+
     return inst;
 }
 
@@ -430,6 +457,14 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
                 "{!}: Unexpected bytes found, spec table invalid or incomplete",
                 .{decodeStreamError.ExtraBytesFound}
             );
+            std.log.debug(
+                "Next several bytes in stream (max 8) =>",
+                .{}
+            );
+            for(memory[bytesRead..], 0..) |byte, idx| {
+                if (idx > 7) break;
+                std.log.debug("{b:0>8}", .{byte});
+            }
             break;
         }
         const sureCapture = captured.?;
@@ -439,7 +474,7 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
             try result.append(inst.?);
         } else {
             std.log.err(
-                "Decoded bit tokens but failed to traslate into instruction",
+                "Decoded bit tokens but failed to translate into instruction",
                 .{}
             );
         }
