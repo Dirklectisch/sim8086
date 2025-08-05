@@ -470,13 +470,23 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     } else if (hasRM) {
         inst.dest = rmOperand;
     }
-    
+
     const hasData = bits.DATA != null;
     if (hasData) {
         const data: i16 = try makeDecimal(bits.DATA.?);
         inst.source = t.Operand{ .IMMEDIATE = t.OperandImmediate{ .value = data }};
     }
-
+    
+    // No obvious destination, check if "immediate to accumalator"
+    const noDest = !hasD and !hasReg and !hasRM;
+    if(noDest and hasData) {
+        const reg: t.Register = switch (bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits) {
+            0b0 => t.Register.AL,
+            0b1 => t.Register.AX,
+        };
+        inst.dest = t.Operand{ .REGISTER = t.OperandRegister{.target = reg}};
+    }
+    
     return inst;
 }
 
