@@ -423,7 +423,8 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     var inst = t.Instruction {
         .name = bits.opName,
         .dest = undefined,
-        .source = undefined
+        .source = undefined,
+        .size = t.Size.UNKNOWN
     };
     
     const hasReg = bits.REG != null;
@@ -477,7 +478,7 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
         inst.source = t.Operand{ .IMMEDIATE = t.OperandImmediate{ .value = data }};
     }
     
-    // No obvious destination, check if "immediate to accumalator"
+    // No obvious destination, check if "immediate to accumulator"
     const noDest = !hasD and !hasReg and !hasRM;
     if(noDest and hasData) {
         const reg: t.Register = switch (bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits) {
@@ -485,6 +486,14 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
             0b1 => t.Register.AX,
         };
         inst.dest = t.Operand{ .REGISTER = t.OperandRegister{.target = reg}};
+    }
+
+    const hasW = bits.W != null;
+    if(hasW) {
+        inst.size = switch (bits.W.?) {
+            0b0 => t.Size.BYTE,
+            0b1 => t.Size.WORD,
+        };
     }
     
     return inst;

@@ -49,8 +49,15 @@ pub const Operand = union(OperandType) {
     ADDRESS: OperandAddress
 };
 
+pub const Size = enum {
+    BYTE,
+    WORD,
+    UNKNOWN,
+};
+
 pub const Instruction = struct {
     name: OperationName,
     dest: Operand,
-    source: Operand
+    source: Operand,
+    size: Size
 };

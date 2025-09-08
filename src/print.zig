@@ -49,10 +49,41 @@ pub fn printOperand(operand: t.Operand, w: anytype) !void {
     }
 }
 
-pub fn printInstr(inst: t.Instruction, w: anytype) !void { 
+fn explicitSize(inst: t.Instruction) bool {
+    const hasAddresDest = switch (inst.dest) {
+        .ADDRESS => true,
+        .IMMEDIATE => false,
+        .REGISTER => false
+    };
+    
+    const hasImmediateSrc = switch (inst.source) {
+        .ADDRESS =>  false,
+        .IMMEDIATE => true,
+        .REGISTER => false,
+    };
+    
+    return hasAddresDest and hasImmediateSrc;
+}
+
+
+pub fn printSize(size: t.Size, w: anytype) !void {
+    const str = switch (size) {
+        t.Size.BYTE => "byte",
+        t.Size.WORD => "word",
+        t.Size.UNKNOWN => "",
+    };
+
+    try w.print("{s}", .{str});
+} 
+
+pub fn printInstr(inst: t.Instruction, w: anytype) !void {
     try printOperationName(inst.name, w);
+    if (explicitSize(inst)) {
+        try w.print(" ", .{});
+        try printSize(inst.size, w);
+    }
     try w.print(" ", .{});
-    try printOperand(inst.dest, w);
+    try printOperand(inst.dest,  w);
     try w.print(", ", .{});
     try printOperand(inst.source, w);
     try w.print("\n", .{});
