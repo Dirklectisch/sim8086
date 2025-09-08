@@ -134,7 +134,7 @@ const specs = [_]Spec{
         FieldName.DATA
     }),
     makeSpec(t.OperationName.CMP, .{
-        @as(u6, 0b001010),
+        @as(u6, 0b001110),
         FieldName.D,
         FieldName.W,
         FieldName.MOD,
@@ -147,13 +147,13 @@ const specs = [_]Spec{
         FieldName.S,
         FieldName.W,
         FieldName.MOD,
-        @as(u3, 0b101),
+        @as(u3, 0b111),
         FieldName.RM,
         FieldName.DISP,
         FieldName.DATA
     }),
     makeSpec(t.OperationName.CMP, .{
-        @as(u7, 0b0010110),
+        @as(u7, 0b0011110),
         FieldName.W,
         FieldName.DATA
     }),
@@ -253,7 +253,13 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
                     },
                     FieldName.DISP =>
                         switch (captured.MOD orelse return AttemptDecodeError.InvalidSpec) {
-                            0b00 => 0,
+                            0b00 => b: {
+                                // Special case in table for direct address
+                                if (captured.RM == 0b110) {
+                                    break :b 16;
+                                } 
+                                break :b 0;
+                            },
                             0b01 => 8,
                             0b10 => 16,
                             0b11 => 0,

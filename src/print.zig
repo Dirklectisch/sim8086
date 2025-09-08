@@ -22,20 +22,27 @@ pub fn printImmediateOperand(operand: t.OperandImmediate, w: anytype) !void {
 pub fn printAddressOperand(operand: t.OperandAddress, w: anytype) !void {
     try w.print("[", .{});
     
+    var hasRegister = false;
+    
     if(operand.registers[0] != null) {
+        hasRegister = true;
         var lower: [2]u8 = undefined;
         _ = std.ascii.lowerString(&lower, @tagName(operand.registers[0].?));
         try w.print("{s}", .{lower});
     }
 
     if(operand.registers[1] != null) {
+        hasRegister = true;
         var lower: [2]u8 = undefined;
         _ = std.ascii.lowerString(&lower, @tagName(operand.registers[1].?));
         try w.print(" + {s}", .{lower});
     }
 
     if(operand.value != null) {
-        try w.print(" + {d}", .{operand.value.?});
+        if(hasRegister) {
+            try w.print(" + ", .{});
+        }
+        try w.print("{d}", .{operand.value.?});
     }
 
     try w.print("]", .{});
