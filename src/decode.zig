@@ -12,7 +12,8 @@ const FieldName = enum {
     REG,
     RM,
     DATA,
-    DISP
+    DISP,
+    IPINC8
 };
 
 const FieldSpec = struct { name: FieldName };
@@ -34,6 +35,7 @@ pub fn maxFieldBitSize(name: FieldName) u8 {
         FieldName.RM => 3,
         FieldName.DATA => 16,
         FieldName.DISP => 16,
+        FieldName.IPINC8 => 8
     };
 }
 
@@ -157,6 +159,10 @@ const specs = [_]Spec{
         FieldName.W,
         FieldName.DATA
     }),
+    makeSpec(t.OperationName.JNZ, .{
+        @as(u8, 0b01110101),
+        FieldName.IPINC8
+    })
 };
 
 // In memory representations of decoded bits
@@ -170,6 +176,7 @@ const CapturedBits = struct {
     RM: ?u3,
     DATA: ?[]const u8,
     DISP: ?[]const u8,
+    IPINC8: ?[]const u8,
     
     opName: t.OperationName,
     bytesRead: usize,
@@ -184,6 +191,7 @@ const CapturedBits = struct {
             .RM = null,
             .DATA = null,
             .DISP = null,
+            .IPINC8 = null,
             .opName = opName,
             .bytesRead = 0,
         };
@@ -208,6 +216,7 @@ const CapturedBits = struct {
         switch (field) {
             FieldName.DATA => this.DATA = value,
             FieldName.DISP => this.DISP = value,
+            FieldName.IPINC8 => this.IPINC8 = value,
             else => {
                 std.log.err("Can not set bit field, use setBitsField instead.", .{});
                 unreachable;
@@ -281,7 +290,16 @@ pub fn attemptDecode(spec: Spec, bytes: []const u8) !CapturedBits {
             const amountOfBytes = bitSize / 8;
             const upTo = byteOffset + amountOfBytes;
             const byteSlice = bytes[byteOffset..upTo];
-            captured.setBytesField(ts.field.name, byteSlice);
+            
+            switch (ts) {
+                .field => |f| captured.setBytesField(f.name, byteSlice),
+                .literal => |l| {
+                    // Only supporting max 8bit literals until we need longer ones 
+                    if (l.value != byteSlice[0]) {
+                        return AttemptDecodeError.SpecDoesNotMatch;
+                    }
+                }
+            }
             bitCursor += bitSize;
             continue;
         }
@@ -432,6 +450,21 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
         .source = undefined,
         .size = t.Size.UNKNOWN
     };
+    
+    const isCondJump = switch (bits.opName) {
+        t.OperationName.JNZ => true,
+        else => false,
+    };
+    
+    if (isCondJump and bits.IPINC8 != null) {
+        const val: i8 = @bitCast(bits.IPINC8.?[0]);
+        const target = t.OperandTarget{
+            .value = val
+        };
+        inst.dest = t.Operand{
+            .TARGET = target
+        };
+    }
     
     const hasReg = bits.REG != null;
     var regOperand: t.Operand = undefined;

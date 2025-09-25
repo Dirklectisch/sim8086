@@ -2,7 +2,8 @@ pub const OperationName = enum {
     MOV,
     ADD,
     SUB,
-    CMP
+    CMP,
+    JNZ
 };
 
 pub const Register = enum {
@@ -27,7 +28,8 @@ pub const Register = enum {
 pub const OperandType = enum {
     REGISTER,
     IMMEDIATE,
-    ADDRESS
+    ADDRESS,
+    TARGET
 };
 
 pub const OperandRegister = struct {
@@ -43,10 +45,15 @@ pub const OperandAddress = struct {
     value: ?i16,
 };
 
+pub const OperandTarget = struct {
+    value: i8
+};
+
 pub const Operand = union(OperandType) {
     REGISTER: OperandRegister,
     IMMEDIATE: OperandImmediate,
-    ADDRESS: OperandAddress
+    ADDRESS: OperandAddress,
+    TARGET: OperandTarget
 };
 
 pub const Size = enum {

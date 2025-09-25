@@ -48,25 +48,28 @@ pub fn printAddressOperand(operand: t.OperandAddress, w: anytype) !void {
     try w.print("]", .{});
 }
 
+pub fn printTargetOperand(operand: t.OperandTarget, w: anytype) !void {
+    try w.print("{d}", .{operand.value});
+}
+
 pub fn printOperand(operand: t.Operand, w: anytype) !void {
     switch (operand) {
         .REGISTER => try printRegisterOperand(operand.REGISTER, w),
         .IMMEDIATE => try printImmediateOperand(operand.IMMEDIATE, w),
         .ADDRESS => try printAddressOperand(operand.ADDRESS, w),
+        .TARGET => try printTargetOperand(operand.TARGET, w)
     }
 }
 
 fn explicitSize(inst: t.Instruction) bool {
     const hasAddresDest = switch (inst.dest) {
         .ADDRESS => true,
-        .IMMEDIATE => false,
-        .REGISTER => false
+        else => false,
     };
     
     const hasImmediateSrc = switch (inst.source) {
-        .ADDRESS =>  false,
         .IMMEDIATE => true,
-        .REGISTER => false,
+        else => false
     };
     
     return hasAddresDest and hasImmediateSrc;
