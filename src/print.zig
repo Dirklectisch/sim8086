@@ -49,7 +49,7 @@ pub fn printAddressOperand(operand: t.OperandAddress, w: anytype) !void {
 }
 
 pub fn printTargetOperand(operand: t.OperandTarget, w: anytype) !void {
-    try w.print("{d}", .{operand.value});
+    try w.print("; {d}", .{operand.value});
 }
 
 pub fn printOperand(operand: t.Operand, w: anytype) !void {
