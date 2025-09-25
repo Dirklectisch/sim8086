@@ -34,12 +34,12 @@ pub fn parseArgs() ArgumentError!Arguments {
 
 pub fn main() u8 {
     const args: Arguments = parseArgs() catch |err| {
-        std.log.err("{!}: Invalid command line arguments", .{err});
+        std.log.err("{t}: Invalid command line arguments", .{err});
         return 1;
     };
 
     const file = std.fs.cwd().openFile(args.path, .{ .mode = .read_only }) catch |err| {
-        std.log.err("{!}: Opening file at path {s} failed", .{ err, args.path });
+        std.log.err("{t}: Opening file at path {s} failed", .{ err, args.path });
         return 1;
     };
     defer file.close();
@@ -50,17 +50,17 @@ pub fn main() u8 {
     
     const megabyte: usize = 1000000;
     const memory = file.readToEndAlloc(allocator, megabyte) catch |err| {
-        std.log.err("{!}: Reading file at path {s} failed", .{ err, args.path });
+        std.log.err("{t}: Reading file at path {s} failed", .{ err, args.path });
         return 1;
     };
 
     const instructions = decode.decodeStream(memory, allocator) catch |err| {
-        std.log.err("{!}: Reading file at path {s} failed", .{ err, args.path });
+        std.log.err("{t}: Reading file at path {s} failed", .{ err, args.path });
         return 1;
     };
     
     print.printInstrXs(instructions, args.path) catch |err| {
-        std.log.err("{!}: Printing instruction failed", .{ err });
+        std.log.err("{t}: Printing instruction failed", .{ err });
         return 1;
     };
     

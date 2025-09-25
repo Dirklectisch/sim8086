@@ -488,7 +488,7 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
     var endOfStream = false;
     var captured: ?CapturedBits = null;
     var inst: ?t.Instruction = null;
-    var result = std.ArrayList(t.Instruction).init(allocator);
+    var result = std.array_list.Managed(t.Instruction).init(allocator);
 
     while (!endOfStream) {
         for (specs) |spec| {
@@ -502,7 +502,7 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
         }
 
         if (captured == null) {
-            std.log.err("{!}: Unexpected bytes found, spec table invalid or incomplete", .{decodeStreamError.ExtraBytesFound});
+            std.log.err("{t}: Unexpected bytes found, spec table invalid or incomplete", .{decodeStreamError.ExtraBytesFound});
             std.log.debug("Next several bytes in stream (max 8) =>", .{});
             for (memory[bytesRead..], 0..) |byte, idx| {
                 if (idx > 7) break;

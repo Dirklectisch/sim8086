@@ -107,9 +107,9 @@ pub fn printInstr(inst: t.Instruction, w: anytype) !void {
 }
 
 pub fn printInstrXs(instructions: []t.Instruction, path: []const u8) !void {
-    const out = std.io.getStdOut();
-    var buf = std.io.bufferedWriter(out.writer());
-    const w = buf.writer();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const w  = &stdout_writer.interface;
     
     try w.print("; {s}\n", .{path});
     try w.print("bits 16\n", .{});
@@ -118,5 +118,5 @@ pub fn printInstrXs(instructions: []t.Instruction, path: []const u8) !void {
         try printInstr(i, w);
     }
 
-    try buf.flush();
+    try w.flush();
 }
