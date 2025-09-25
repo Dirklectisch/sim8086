@@ -447,7 +447,7 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     var inst = t.Instruction {
         .name = bits.opName,
         .dest = undefined,
-        .source = undefined,
+        .source = null,
         .size = t.Size.UNKNOWN
     };
     

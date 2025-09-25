@@ -62,12 +62,16 @@ pub fn printOperand(operand: t.Operand, w: anytype) !void {
 }
 
 fn explicitSize(inst: t.Instruction) bool {
+    if (inst.source == null) {
+        return false;
+    }
+    
     const hasAddresDest = switch (inst.dest) {
         .ADDRESS => true,
         else => false,
     };
     
-    const hasImmediateSrc = switch (inst.source) {
+    const hasImmediateSrc = switch (inst.source.?) {
         .IMMEDIATE => true,
         else => false
     };
@@ -94,8 +98,10 @@ pub fn printInstr(inst: t.Instruction, w: anytype) !void {
     }
     try w.print(" ", .{});
     try printOperand(inst.dest,  w);
-    try w.print(", ", .{});
-    try printOperand(inst.source, w);
+    if (inst.source != null) {
+        try w.print(", ", .{});
+        try printOperand(inst.source.?, w);
+    }
     try w.print("\n", .{});
 }
 

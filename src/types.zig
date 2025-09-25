@@ -65,6 +65,6 @@ pub const Size = enum {
 pub const Instruction = struct {
     name: OperationName,
     dest: Operand,
-    source: Operand,
+    source: ?Operand,
     size: Size
 };
