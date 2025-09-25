@@ -3,7 +3,27 @@ pub const OperationName = enum {
     ADD,
     SUB,
     CMP,
-    JNZ
+    JNZ,
+    JE,
+    JL,
+    JLE,
+    JB,
+    JBE,
+    JP,
+    JO,
+    JS,
+    JNE,
+    JNL,
+    JG,
+    JNB,
+    JA,
+    JNP,
+    JNO,
+    JNS,
+    LOOP,
+    LOOPZ,
+    LOOPNZ,
+    JCXZ,
 };
 
 pub const Register = enum {

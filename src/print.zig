@@ -2,10 +2,11 @@ const std = @import("std");
 const t = @import("types.zig");
 
 pub fn printOperationName(name: t.OperationName, w: anytype) !void {
-    var lower: [3]u8 = undefined; 
-    _ = std.ascii.lowerString(&lower, @tagName(name));
+    const tagName = @tagName(name);
+    var buf: [3]u8 = undefined;
+    const lowerTagName = std.ascii.lowerString(&buf, tagName);
     
-    try w.print("{s}", .{lower});
+    try w.print("{s}", .{lowerTagName});
 }
 
 pub fn printRegisterOperand(operand: t.OperandRegister, w: anytype) !void {
