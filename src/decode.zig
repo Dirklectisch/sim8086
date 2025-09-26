@@ -50,7 +50,24 @@ fn makeSpec(comptime name: t.OperationName, comptime fields: anytype) Spec {
 }
 
 const specs = [_]Spec{
-    makeSpec(t.OperationName.MOV, .{ @as(u6, 0b100010), FieldName.D, FieldName.W, FieldName.MOD, FieldName.REG, FieldName.RM, FieldName.DISP }),
+    makeSpec(t.OperationName.MOV, .{
+        @as(u6, 0b100010),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP
+    }),
+    makeSpec(t.OperationName.MOV, .{
+        @as(u6, 0b100010),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP 
+    }),
     makeSpec(t.OperationName.MOV, .{
         @as(u7, 0b1100011),
         FieldName.W,
@@ -66,16 +83,82 @@ const specs = [_]Spec{
         FieldName.REG,
         FieldName.DATA,
     }),
-    makeSpec(t.OperationName.ADD, .{ @as(u6, 0b000000), FieldName.D, FieldName.W, FieldName.MOD, FieldName.REG, FieldName.RM, FieldName.DISP }),
-    makeSpec(t.OperationName.ADD, .{ @as(u6, 0b100000), FieldName.S, FieldName.W, FieldName.MOD, @as(u3, 0b000), FieldName.RM, FieldName.DISP, FieldName.DATA }),
-    makeSpec(t.OperationName.ADD, .{ @as(u7, 0b0000010), FieldName.W, FieldName.DATA }),
-    makeSpec(t.OperationName.SUB, .{ @as(u6, 0b001010), FieldName.D, FieldName.W, FieldName.MOD, FieldName.REG, FieldName.RM, FieldName.DISP }),
-    makeSpec(t.OperationName.SUB, .{ @as(u6, 0b100000), FieldName.S, FieldName.W, FieldName.MOD, @as(u3, 0b101), FieldName.RM, FieldName.DISP, FieldName.DATA }),
-    makeSpec(t.OperationName.SUB, .{ @as(u7, 0b0010110), FieldName.W, FieldName.DATA }),
-    makeSpec(t.OperationName.CMP, .{ @as(u6, 0b001110), FieldName.D, FieldName.W, FieldName.MOD, FieldName.REG, FieldName.RM, FieldName.DISP }),
-    makeSpec(t.OperationName.CMP, .{ @as(u6, 0b100000), FieldName.S, FieldName.W, FieldName.MOD, @as(u3, 0b111), FieldName.RM, FieldName.DISP, FieldName.DATA }),
-    makeSpec(t.OperationName.CMP, .{ @as(u7, 0b0011110), FieldName.W, FieldName.DATA }),
-    makeSpec(t.OperationName.JNZ, .{ @as(u8, 0b01110101), FieldName.IPINC8 }),
+    makeSpec(t.OperationName.ADD, .{
+        @as(u6, 0b000000),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP
+    }),
+    makeSpec(t.OperationName.ADD, .{
+        @as(u6, 0b100000),
+        FieldName.S,
+        FieldName.W,
+        FieldName.MOD,
+        @as(u3, 0b000),
+        FieldName.RM,
+        FieldName.DISP,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.ADD, .{
+        @as(u7, 0b0000010),
+        FieldName.W,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.SUB, .{
+        @as(u6, 0b001010),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP
+    }),
+    makeSpec(t.OperationName.SUB, .{
+        @as(u6, 0b100000),
+        FieldName.S,
+        FieldName.W,
+        FieldName.MOD,
+        @as(u3, 0b101),
+        FieldName.RM,
+        FieldName.DISP,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.SUB, .{
+        @as(u7, 0b0010110),
+        FieldName.W,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.CMP, .{
+        @as(u6, 0b001110),
+        FieldName.D,
+        FieldName.W,
+        FieldName.MOD,
+        FieldName.REG,
+        FieldName.RM,
+        FieldName.DISP
+    }),
+    makeSpec(t.OperationName.CMP, .{
+        @as(u6, 0b100000),
+        FieldName.S,
+        FieldName.W,
+        FieldName.MOD,
+        @as(u3, 0b111),
+        FieldName.RM,
+        FieldName.DISP,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.CMP, .{
+        @as(u7, 0b0011110),
+        FieldName.W,
+        FieldName.DATA
+    }),
+    makeSpec(t.OperationName.JNZ, .{
+        @as(u8, 0b01110101),
+        FieldName.IPINC8
+    }),
     makeSpec(t.OperationName.JE, .{ @as(u8, 0b1110100), FieldName.IPINC8 }),
     makeSpec(t.OperationName.JL, .{ @as(u8, 0b1111100), FieldName.IPINC8 }),
     makeSpec(t.OperationName.JLE, .{ @as(u8, 0b01111110), FieldName.IPINC8 }),
