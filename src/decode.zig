@@ -571,7 +571,7 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
     var endOfStream = false;
     var captured: ?CapturedBits = null;
     var inst: ?t.Instruction = null;
-    var result = std.array_list.Managed(t.Instruction).init(allocator);
+    var result = std.ArrayList(t.Instruction).empty;
 
     while (!endOfStream) {
         for (specs) |spec| {
@@ -597,7 +597,7 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
 
         inst = decodeCapturedBits(sureCapture) catch null;
         if (inst != null) {
-            try result.append(inst.?);
+            try result.append(allocator, inst.?);
         } else {
             std.log.err("Decoded bit tokens but failed to translate into instruction", .{});
         }
@@ -607,5 +607,5 @@ pub fn decodeStream(memory: []u8, allocator: std.mem.Allocator) ![]t.Instruction
         captured = null;
     }
 
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
