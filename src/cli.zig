@@ -4,26 +4,43 @@ const print = @import("print.zig");
 
 // Command line argument parsing
 
+const Commands = enum {
+    exec,
+    decode
+};
+
 const Arguments = struct {
+    command: Commands, 
     path: []const u8,
 };
 
 const ArgumentError = error{
-    MissingPath,
+    MissingArgument,
+    UnknownCommand
 };
 
 pub fn parseArgs() ArgumentError!Arguments {
     var parsedArguments: Arguments = undefined;
     const length: usize = std.os.argv.len;
-    if (length < 2) {
-        return ArgumentError.MissingPath;
+    if (length < 3) {
+        return ArgumentError.MissingArgument;
     }
+    
+    parsedArguments = Arguments{
+        .command = undefined,
+        .path = undefined
+    };
 
     for (std.os.argv, 0..) |arg, idx| {
         if (idx == 1) {
-            parsedArguments = Arguments{
-                .path = std.mem.span(arg),
+            const str: []const u8 = std.mem.span(arg);
+            parsedArguments.command = std.meta.stringToEnum(Commands, str) orelse {
+                return ArgumentError.UnknownCommand; 
             };
+        }
+        
+        if (idx == 2) {
+            parsedArguments.path = std.mem.span(arg); 
         }
     }
 
@@ -59,10 +76,18 @@ pub fn main() u8 {
         return 1;
     };
     
-    print.printInstrXs(instructions, args.path) catch |err| {
-        std.log.err("{t}: Printing instruction failed", .{ err });
-        return 1;
-    };
+    switch (args.command) {
+        Commands.decode => {
+            print.printInstrXs(instructions, args.path) catch |err| {
+                std.log.err("{t}: Printing instruction failed", .{ err });
+                return 1;
+            };
+        },
+        Commands.exec => {
+            std.log.err("Exec command not yet implemented", .{});
+            return 1;
+        }
+    }
     
     return 0;
 }
