@@ -1,6 +1,7 @@
 const std = @import("std");
 const decode = @import("decode.zig");
 const print = @import("print.zig");
+const sim = @import("sim.zig");
 
 // Command line argument parsing
 
@@ -84,8 +85,7 @@ pub fn main() u8 {
             };
         },
         Commands.exec => {
-            std.log.err("Exec command not yet implemented", .{});
-            return 1;
+            sim.simProgram(instructions);
         }
     }
     

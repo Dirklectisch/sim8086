@@ -374,27 +374,27 @@ test "Endianess in standard library readInt function" {
 
 // Transform captured bits into instructions
 
-fn findRegister(wide: u1, reg: u3) t.Register {
+fn findRegister(wide: u1, reg: u3) t.RegisterName {
     return switch (wide) {
         0b0 => switch (reg) {
-            0b000 => t.Register.AL,
-            0b001 => t.Register.CL,
-            0b010 => t.Register.DL,
-            0b011 => t.Register.BL,
-            0b100 => t.Register.AH,
-            0b101 => t.Register.CH,
-            0b110 => t.Register.DH,
-            0b111 => t.Register.BH,
+            0b000 => t.RegisterName.AL,
+            0b001 => t.RegisterName.CL,
+            0b010 => t.RegisterName.DL,
+            0b011 => t.RegisterName.BL,
+            0b100 => t.RegisterName.AH,
+            0b101 => t.RegisterName.CH,
+            0b110 => t.RegisterName.DH,
+            0b111 => t.RegisterName.BH,
         },
         0b1 => switch (reg) {
-            0b000 => t.Register.AX,
-            0b001 => t.Register.CX,
-            0b010 => t.Register.DX,
-            0b011 => t.Register.BX,
-            0b100 => t.Register.SP,
-            0b101 => t.Register.BP,
-            0b110 => t.Register.SI,
-            0b111 => t.Register.DI,
+            0b000 => t.RegisterName.AX,
+            0b001 => t.RegisterName.CX,
+            0b010 => t.RegisterName.DX,
+            0b011 => t.RegisterName.BX,
+            0b100 => t.RegisterName.SP,
+            0b101 => t.RegisterName.BP,
+            0b110 => t.RegisterName.SI,
+            0b111 => t.RegisterName.DI,
         },
     };
 }
@@ -414,21 +414,21 @@ fn makeAddressOperand(rm: u3, mod: u2, disp: ?i16) t.Operand {
         .value = null,
     };
 
-    const registers: [2]?t.Register = switch (rm) {
-        0b000 => [2]?t.Register{ t.Register.BX, t.Register.SI },
-        0b001 => [2]?t.Register{ t.Register.BX, t.Register.DI },
-        0b010 => [2]?t.Register{ t.Register.BP, t.Register.SI },
-        0b011 => [2]?t.Register{ t.Register.BP, t.Register.DI },
-        0b100 => [2]?t.Register{ t.Register.SI, null },
-        0b101 => [2]?t.Register{ t.Register.DI, null },
+    const registers: [2]?t.RegisterName = switch (rm) {
+        0b000 => [2]?t.RegisterName{ t.RegisterName.BX, t.RegisterName.SI },
+        0b001 => [2]?t.RegisterName{ t.RegisterName.BX, t.RegisterName.DI },
+        0b010 => [2]?t.RegisterName{ t.RegisterName.BP, t.RegisterName.SI },
+        0b011 => [2]?t.RegisterName{ t.RegisterName.BP, t.RegisterName.DI },
+        0b100 => [2]?t.RegisterName{ t.RegisterName.SI, null },
+        0b101 => [2]?t.RegisterName{ t.RegisterName.DI, null },
         0b110 => b: {
             if (mod == 0b00) {
-                break :b [2]?t.Register{ null, null };
+                break :b [2]?t.RegisterName{ null, null };
             } else {
-                break :b [2]?t.Register{ t.Register.BP, null };
+                break :b [2]?t.RegisterName{ t.RegisterName.BP, null };
             }
         },
-        0b111 => [2]?t.Register{ t.Register.BX, null },
+        0b111 => [2]?t.RegisterName{ t.RegisterName.BX, null },
     };
     addressOperand.registers = registers;
 
@@ -457,8 +457,6 @@ fn makeDecimal(bytes: []const u8) !i16 {
 }
 
 fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
-    std.log.debug("start to decode captured bits {any}", .{bits});
-
     var inst = t.Instruction{ .name = bits.opName, .dest = undefined, .source = null, .size = t.Size.UNKNOWN };
 
     const isCondJump = switch (bits.opName) {
@@ -546,9 +544,9 @@ fn decodeCapturedBits(bits: CapturedBits) !t.Instruction {
     // No obvious destination, check if "immediate to accumulator"
     const noDest = !hasD and !hasReg and !hasRM;
     if (noDest and hasData) {
-        const reg: t.Register = switch (bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits) {
-            0b0 => t.Register.AL,
-            0b1 => t.Register.AX,
+        const reg: t.RegisterName = switch (bits.W orelse return DecodeCapturedBitsError.UnrecognizedBits) {
+            0b0 => t.RegisterName.AL,
+            0b1 => t.RegisterName.AX,
         };
         inst.dest = t.Operand{ .REGISTER = t.OperandRegister{ .target = reg } };
     }

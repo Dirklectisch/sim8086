@@ -26,7 +26,7 @@ pub const OperationName = enum {
     JCXZ,
 };
 
-pub const Register = enum {
+pub const RegisterName = enum {
     AX,
     AL,
     AH,
@@ -53,7 +53,7 @@ pub const OperandType = enum {
 };
 
 pub const OperandRegister = struct {
-    target: Register
+    target: RegisterName
 };
 
 pub const OperandImmediate = struct {
@@ -61,7 +61,7 @@ pub const OperandImmediate = struct {
 };
 
 pub const OperandAddress = struct {
-    registers: [2]?Register,
+    registers: [2]?RegisterName,
     value: ?i16,
 };
 
