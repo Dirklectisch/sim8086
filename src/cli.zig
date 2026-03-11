@@ -48,7 +48,9 @@ pub fn parseArgs() ArgumentError!Arguments {
     return parsedArguments;
 }
 
-// Main entry point
+var stdout_buffer: [1024]u8 = undefined;
+var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+const stdout_writer_ptr  = &stdout_writer.interface;
 
 pub fn main() u8 {
     const args: Arguments = parseArgs() catch |err| {
@@ -73,19 +75,22 @@ pub fn main() u8 {
     };
 
     const instructions = decode.decodeStream(memory, allocator) catch |err| {
-        std.log.err("{t}: Reading file at path {s} failed", .{ err, args.path });
+        std.log.err("{t}: Decoding instructions in file {s} failed", .{ err, args.path });
         return 1;
     };
     
     switch (args.command) {
         Commands.decode => {
-            print.printInstrXs(instructions, args.path) catch |err| {
+            print.printInstrXs(stdout_writer_ptr,instructions, args.path) catch |err| {
                 std.log.err("{t}: Printing instruction failed", .{ err });
                 return 1;
             };
         },
         Commands.exec => {
-            sim.simProgram(instructions);
+            sim.simProgram(stdout_writer_ptr, instructions) catch |err| {
+                std.log.err("{t}: Simulating istructions failed", .{ err });
+                return 1;
+            };
         }
     }
     

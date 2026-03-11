@@ -149,19 +149,39 @@ fn debugRegister(name: []const u8, ptr: *u16) void {
     std.log.debug("{s}: 0x{x:0>4} {d}", .{name, ptr.*, ptr.*});
 }
 
-pub fn simProgram(instructions: []t.Instruction) void {
+pub fn simProgram(w: *std.Io.Writer, instructions: []t.Instruction) !void {
     for(instructions) |inst| {
         simInstr(inst) catch |err| {
             std.log.err("{t}: An error occured when simulation an instruction", .{err});
         };
     }
+    
+    // Print final overview of register state
+    // 
+    // Example:
+    // 
+    // Final registers:
+    // ax: 0x0001 (1)
+    // bx: 0x0002 (2)
+    // cx: 0x0003 (3)
+    // dx: 0x0004 (4)
+    // sp: 0x0005 (5)
+    // bp: 0x0006 (6)
+    // si: 0x0007 (7)
+    // di: 0x0008 (8)
+    
+    try w.*.print("Final registers:\n", .{});
+    try printRegister(w,"ax", register_pointers.ax);
+    try printRegister(w,"bx", register_pointers.bx);
+    try printRegister(w,"cx", register_pointers.cx);
+    try printRegister(w,"dx", register_pointers.dx);
+    try printRegister(w,"sp", register_pointers.sp);
+    try printRegister(w,"bp", register_pointers.bp);
+    try printRegister(w,"si", register_pointers.si);
+    try printRegister(w,"di", register_pointers.di);
+    try w.flush();
+}
 
-    debugRegister("ax", register_pointers.ax);
-    debugRegister("bx", register_pointers.bx);
-    debugRegister("cx", register_pointers.cx);
-    debugRegister("dx", register_pointers.dx);
-    debugRegister("sp", register_pointers.sp);
-    debugRegister("bp", register_pointers.bp);
-    debugRegister("si", register_pointers.si);
-    debugRegister("di", register_pointers.di);
+fn printRegister(w: *std.Io.Writer, name: []const u8, ptr: *u16) !void {
+    try w.print("      {s}: 0x{x:0>4} {d}\n", .{name, ptr.*, ptr.*});
 }
