@@ -91,7 +91,7 @@ pub fn printSize(size: t.Size, w: anytype) !void {
     try w.print("{s}", .{str});
 } 
 
-pub fn printInstr(inst: t.Instruction, w: anytype) !void {
+pub fn printInstr(w: *std.Io.Writer, inst: t.Instruction) !void {
     try printOperationName(inst.name, w);
     if (explicitSize(inst)) {
         try w.print(" ", .{});
@@ -103,7 +103,6 @@ pub fn printInstr(inst: t.Instruction, w: anytype) !void {
         try w.print(", ", .{});
         try printOperand(inst.source.?, w);
     }
-    try w.print("\n", .{});
 }
 
 pub fn printInstrXs(w: *std.Io.Writer, instructions: []t.Instruction, path: []const u8) !void {
@@ -111,7 +110,8 @@ pub fn printInstrXs(w: *std.Io.Writer, instructions: []t.Instruction, path: []co
     try w.print("bits 16\n", .{});
 
     for (instructions) |i| {
-        try printInstr(i, w);
+        try printInstr(w, i);
+        try w.print("\n", .{});
     }
 
     try w.flush();

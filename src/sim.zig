@@ -1,5 +1,6 @@
 const std = @import("std");
 const t = @import("types.zig");
+const p = @import("print.zig");
 const expect = std.testing.expect;
 
 // Note that because it's most natural to work with little endian data..
@@ -106,12 +107,20 @@ fn ptrForReg(name: t.RegisterName) *u16 {
     };
 }
 
+const MutationResult = struct {
+    register_name: t.RegisterName,
+    original_value: u16,
+    updated_value: u16,
+};
+
 const SimError = error {
     NotImplemented,
     InvalidInstruction
 };
 
-fn simInstr(inst: t.Instruction) !void {
+fn simInstr(w: *std.Io.Writer, inst: t.Instruction) !void {
+    var mutation_result: MutationResult = undefined;
+    
     switch (inst.name) {
         t.OperationName.MOV => {
             if(inst.source == null) {
@@ -131,27 +140,29 @@ fn simInstr(inst: t.Instruction) !void {
             switch (inst.dest) {
                 .REGISTER => |register_op| {
                     dest_ptr = ptrForReg(register_op.target);
+                    mutation_result.register_name = register_op.target;
                 },
                 else => {
                     return SimError.NotImplemented;
                 }
             }
-            
+
+            mutation_result.original_value = dest_ptr.*;
             dest_ptr.* = src_val;
+            mutation_result.updated_value = dest_ptr.*;
+            
         },
         else => {
             return SimError.NotImplemented;
         }
     }
-}
-
-fn debugRegister(name: []const u8, ptr: *u16) void {
-    std.log.debug("{s}: 0x{x:0>4} {d}", .{name, ptr.*, ptr.*});
+    
+    try printMutation(w, inst, mutation_result);
 }
 
 pub fn simProgram(w: *std.Io.Writer, instructions: []t.Instruction) !void {
     for(instructions) |inst| {
-        simInstr(inst) catch |err| {
+        simInstr(w, inst) catch |err| {
             std.log.err("{t}: An error occured when simulation an instruction", .{err});
         };
     }
@@ -170,7 +181,7 @@ pub fn simProgram(w: *std.Io.Writer, instructions: []t.Instruction) !void {
     // si: 0x0007 (7)
     // di: 0x0008 (8)
     
-    try w.*.print("Final registers:\n", .{});
+    try w.print("Final registers:\n", .{});
     try printRegister(w,"ax", register_pointers.ax);
     try printRegister(w,"bx", register_pointers.bx);
     try printRegister(w,"cx", register_pointers.cx);
@@ -183,5 +194,12 @@ pub fn simProgram(w: *std.Io.Writer, instructions: []t.Instruction) !void {
 }
 
 fn printRegister(w: *std.Io.Writer, name: []const u8, ptr: *u16) !void {
-    try w.print("      {s}: 0x{x:0>4} {d}\n", .{name, ptr.*, ptr.*});
+    try w.print("      {s}: 0x{x:0>4} ({d})\n", .{name, ptr.*, ptr.*});
+}
+
+fn printMutation(w: *std.Io.Writer, instr: t.Instruction, result: MutationResult) !void {
+    // Example: "mov ax, 1 ; ax:0x0->0x1"
+    try p.printInstr(w, instr);
+    try w.print(" ; ax:0x{x}->0x{x}", .{result.original_value, result.updated_value});
+    try w.print("\n", .{});
 }
