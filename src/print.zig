@@ -1,27 +1,44 @@
 const std = @import("std");
 const t = @import("types.zig");
 
-pub fn printOperationName(name: t.OperationName, w: anytype) !void {
+// Global standard out buffer, don't forget to flush!
+var stdout_buffer: [1024]u8 = undefined;
+var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+const stdout_writer_ptr  = &stdout_writer.interface;
+
+pub fn print(comptime fmt: []const u8, args: anytype) void {
+    stdout_writer_ptr.print(fmt, args) catch |err| {
+        std.log.err("{t}: Failed to print to stdout", .{ err });
+    };
+}
+
+pub fn flush() void {
+    stdout_writer_ptr.flush() catch |err| {
+        std.log.err("{t}: Failed to flush stdout buffer", .{err});
+    };
+}
+
+pub fn printOperationName(name: t.OperationName) void {
     const tagName = @tagName(name);
     var buf: [3]u8 = undefined;
     const lowerTagName = std.ascii.lowerString(&buf, tagName);
     
-    try w.print("{s}", .{lowerTagName});
+    print("{s}", .{lowerTagName});
 }
 
-pub fn printRegisterOperand(operand: t.OperandRegister, w: anytype) !void {
+pub fn printRegisterOperand(operand: t.OperandRegister) void {
     var lower: [2]u8 = undefined;
     _ = std.ascii.lowerString(&lower, @tagName(operand.target));
     
-    try w.print("{s}", .{lower});
+    print("{s}", .{lower});
 }
 
-pub fn printImmediateOperand(operand: t.OperandImmediate, w: anytype) !void {
-    try w.print("{d}", .{operand.value});
+pub fn printImmediateOperand(operand: t.OperandImmediate) void {
+    print("{d}", .{operand.value});
 }
 
-pub fn printAddressOperand(operand: t.OperandAddress, w: anytype) !void {
-    try w.print("[", .{});
+pub fn printAddressOperand(operand: t.OperandAddress) void {
+    print("[", .{});
     
     var hasRegister = false;
     
@@ -29,36 +46,36 @@ pub fn printAddressOperand(operand: t.OperandAddress, w: anytype) !void {
         hasRegister = true;
         var lower: [2]u8 = undefined;
         _ = std.ascii.lowerString(&lower, @tagName(operand.registers[0].?));
-        try w.print("{s}", .{lower});
+        print("{s}", .{lower});
     }
 
     if(operand.registers[1] != null) {
         hasRegister = true;
         var lower: [2]u8 = undefined;
         _ = std.ascii.lowerString(&lower, @tagName(operand.registers[1].?));
-        try w.print(" + {s}", .{lower});
+        print(" + {s}", .{lower});
     }
 
     if(operand.value != null) {
         if(hasRegister) {
-            try w.print(" + ", .{});
+            print(" + ", .{});
         }
-        try w.print("{d}", .{operand.value.?});
+        print("{d}", .{operand.value.?});
     }
 
-    try w.print("]", .{});
+    print("]", .{});
 }
 
-pub fn printTargetOperand(operand: t.OperandTarget, w: anytype) !void {
-    try w.print("; {d}", .{operand.value});
+pub fn printTargetOperand(operand: t.OperandTarget) void {
+    print("; {d}", .{operand.value});
 }
 
-pub fn printOperand(operand: t.Operand, w: anytype) !void {
+pub fn printOperand(operand: t.Operand) void {
     switch (operand) {
-        .REGISTER => try printRegisterOperand(operand.REGISTER, w),
-        .IMMEDIATE => try printImmediateOperand(operand.IMMEDIATE, w),
-        .ADDRESS => try printAddressOperand(operand.ADDRESS, w),
-        .TARGET => try printTargetOperand(operand.TARGET, w)
+        .REGISTER => printRegisterOperand(operand.REGISTER),
+        .IMMEDIATE => printImmediateOperand(operand.IMMEDIATE),
+        .ADDRESS => printAddressOperand(operand.ADDRESS),
+        .TARGET => printTargetOperand(operand.TARGET)
     }
 }
 
@@ -81,38 +98,36 @@ fn explicitSize(inst: t.Instruction) bool {
 }
 
 
-pub fn printSize(size: t.Size, w: anytype) !void {
+pub fn printSize(size: t.Size) void {
     const str = switch (size) {
         t.Size.BYTE => "byte",
         t.Size.WORD => "word",
         t.Size.UNKNOWN => "",
     };
 
-    try w.print("{s}", .{str});
+    print("{s}", .{str});
 } 
 
-pub fn printInstr(w: *std.Io.Writer, inst: t.Instruction) !void {
-    try printOperationName(inst.name, w);
+pub fn printInstr(inst: t.Instruction) void {
+    printOperationName(inst.name);
     if (explicitSize(inst)) {
-        try w.print(" ", .{});
-        try printSize(inst.size, w);
+        print(" ", .{});
+        printSize(inst.size);
     }
-    try w.print(" ", .{});
-    try printOperand(inst.dest,  w);
+    print(" ", .{});
+    printOperand(inst.dest);
     if (inst.source != null) {
-        try w.print(", ", .{});
-        try printOperand(inst.source.?, w);
+        print(", ", .{});
+        printOperand(inst.source.?);
     }
 }
 
-pub fn printInstrXs(w: *std.Io.Writer, instructions: []t.Instruction, path: []const u8) !void {
-    try w.print("; {s}\n", .{path});
-    try w.print("bits 16\n", .{});
+pub fn printInstrXs(instructions: []t.Instruction, path: []const u8) void {
+    print("; {s}\n", .{path});
+    print("bits 16\n", .{});
 
     for (instructions) |i| {
-        try printInstr(w, i);
-        try w.print("\n", .{});
+        printInstr(i);
+        print("\n", .{});
     }
-
-    try w.flush();
 }

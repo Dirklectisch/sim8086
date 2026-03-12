@@ -1,6 +1,6 @@
 const std = @import("std");
 const decode = @import("decode.zig");
-const print = @import("print.zig");
+const p = @import("print.zig");
 const sim = @import("sim.zig");
 
 // Command line argument parsing
@@ -48,10 +48,6 @@ pub fn parseArgs() ArgumentError!Arguments {
     return parsedArguments;
 }
 
-var stdout_buffer: [1024]u8 = undefined;
-var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-const stdout_writer_ptr  = &stdout_writer.interface;
-
 pub fn main() u8 {
     const args: Arguments = parseArgs() catch |err| {
         std.log.err("{t}: Invalid command line arguments", .{err});
@@ -81,18 +77,16 @@ pub fn main() u8 {
     
     switch (args.command) {
         Commands.decode => {
-            print.printInstrXs(stdout_writer_ptr,instructions, args.path) catch |err| {
-                std.log.err("{t}: Printing instruction failed", .{ err });
-                return 1;
-            };
+            p.printInstrXs(instructions, args.path);
         },
         Commands.exec => {
-            sim.simProgram(stdout_writer_ptr, instructions) catch |err| {
-                std.log.err("{t}: Simulating istructions failed", .{ err });
+            sim.simProgram(instructions) catch |err| {
+                std.log.err("{t}: Simulating Instructions failed", .{ err });
                 return 1;
             };
         }
     }
     
+    p.flush();
     return 0;
 }

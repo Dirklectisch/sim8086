@@ -118,7 +118,7 @@ const SimError = error {
     InvalidInstruction
 };
 
-fn simInstr(w: *std.Io.Writer, inst: t.Instruction) !void {
+fn simInstr(inst: t.Instruction) !void {
     var mutation_result: MutationResult = undefined;
     
     switch (inst.name) {
@@ -157,12 +157,12 @@ fn simInstr(w: *std.Io.Writer, inst: t.Instruction) !void {
         }
     }
     
-    try printMutation(w, inst, mutation_result);
+    printMutation( inst, mutation_result);
 }
 
-pub fn simProgram(w: *std.Io.Writer, instructions: []t.Instruction) !void {
+pub fn simProgram(instructions: []t.Instruction) !void {
     for(instructions) |inst| {
-        simInstr(w, inst) catch |err| {
+        simInstr(inst) catch |err| {
             std.log.err("{t}: An error occured when simulation an instruction", .{err});
         };
     }
@@ -181,25 +181,24 @@ pub fn simProgram(w: *std.Io.Writer, instructions: []t.Instruction) !void {
     // si: 0x0007 (7)
     // di: 0x0008 (8)
     
-    try w.print("Final registers:\n", .{});
-    try printRegister(w,"ax", register_pointers.ax);
-    try printRegister(w,"bx", register_pointers.bx);
-    try printRegister(w,"cx", register_pointers.cx);
-    try printRegister(w,"dx", register_pointers.dx);
-    try printRegister(w,"sp", register_pointers.sp);
-    try printRegister(w,"bp", register_pointers.bp);
-    try printRegister(w,"si", register_pointers.si);
-    try printRegister(w,"di", register_pointers.di);
-    try w.flush();
+    p.print("Final registers:\n", .{});
+    printRegister("ax", register_pointers.ax);
+    printRegister("bx", register_pointers.bx);
+    printRegister("cx", register_pointers.cx);
+    printRegister("dx", register_pointers.dx);
+    printRegister("sp", register_pointers.sp);
+    printRegister("bp", register_pointers.bp);
+    printRegister("si", register_pointers.si);
+    printRegister("di", register_pointers.di);
 }
 
-fn printRegister(w: *std.Io.Writer, name: []const u8, ptr: *u16) !void {
-    try w.print("      {s}: 0x{x:0>4} ({d})\n", .{name, ptr.*, ptr.*});
+fn printRegister(name: []const u8, ptr: *u16) void {
+    p.print("      {s}: 0x{x:0>4} ({d})\n", .{name, ptr.*, ptr.*});
 }
 
-fn printMutation(w: *std.Io.Writer, instr: t.Instruction, result: MutationResult) !void {
+fn printMutation(instr: t.Instruction, result: MutationResult) void {
     // Example: "mov ax, 1 ; ax:0x0->0x1"
-    try p.printInstr(w, instr);
-    try w.print(" ; ax:0x{x}->0x{x}", .{result.original_value, result.updated_value});
-    try w.print("\n", .{});
+    p.printInstr(instr);
+    p.print(" ; ax:0x{x}->0x{x}", .{result.original_value, result.updated_value});
+    p.print("\n", .{});
 }
