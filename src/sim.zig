@@ -93,17 +93,36 @@ const register_pointers = RegisterPointers{
     .di = toFullPtr(&register_data.di),
 };
 
-fn ptrForReg(name: t.RegisterName) *u16 {
+const TaggedPointer = union(enum){
+    u8_ptr: *u8,
+    u16_ptr: *u16,
+    
+    pub fn size(self: TaggedPointer) usize {
+        return switch (self) {
+            .u8_ptr => @sizeOf(u8),
+            .u16_ptr => @sizeOf(u16),
+        };
+    }
+};
+
+fn ptrForReg(name: t.RegisterName) TaggedPointer {
     return switch (name) {
-        t.RegisterName.AX => register_pointers.ax,
-        t.RegisterName.BX => register_pointers.bx,
-        t.RegisterName.CX => register_pointers.cx,
-        t.RegisterName.DX => register_pointers.dx,
-        t.RegisterName.SP => register_pointers.sp,
-        t.RegisterName.BP => register_pointers.bp,
-        t.RegisterName.SI => register_pointers.si,
-        t.RegisterName.DI => register_pointers.di,
-        else => unreachable
+        t.RegisterName.AX => TaggedPointer{.u16_ptr = register_pointers.ax},
+        t.RegisterName.BX => TaggedPointer{.u16_ptr = register_pointers.bx},
+        t.RegisterName.CX => TaggedPointer{.u16_ptr = register_pointers.cx},
+        t.RegisterName.DX => TaggedPointer{.u16_ptr = register_pointers.dx},
+        t.RegisterName.SP => TaggedPointer{.u16_ptr = register_pointers.sp},
+        t.RegisterName.BP => TaggedPointer{.u16_ptr = register_pointers.bp},
+        t.RegisterName.SI => TaggedPointer{.u16_ptr = register_pointers.si},
+        t.RegisterName.DI => TaggedPointer{.u16_ptr = register_pointers.di},
+        t.RegisterName.AH => TaggedPointer{.u8_ptr = register_pointers.ah},
+        t.RegisterName.AL => TaggedPointer{.u8_ptr = register_pointers.al},
+        t.RegisterName.BH => TaggedPointer{.u8_ptr = register_pointers.bh},
+        t.RegisterName.BL => TaggedPointer{.u8_ptr = register_pointers.bl},
+        t.RegisterName.CH => TaggedPointer{.u8_ptr = register_pointers.ch},
+        t.RegisterName.CL => TaggedPointer{.u8_ptr = register_pointers.cl},
+        t.RegisterName.DH => TaggedPointer{.u8_ptr = register_pointers.dh},
+        t.RegisterName.DL => TaggedPointer{.u8_ptr = register_pointers.dl},
     };
 }
 
@@ -126,17 +145,8 @@ fn simInstr(inst: t.Instruction) !void {
             if(inst.source == null) {
                 return SimError.InvalidInstruction;
             }
-            var src_val: u16 = undefined;
-            switch (inst.source.?) {
-                .IMMEDIATE => |immediate_op| {
-                    src_val = @bitCast(immediate_op.value);
-                },
-                else => {
-                    return SimError.NotImplemented;
-                }
-            }
 
-            var dest_ptr: *u16 = undefined;
+            var dest_ptr: TaggedPointer = undefined;
             switch (inst.dest) {
                 .REGISTER => |register_op| {
                     dest_ptr = ptrForReg(register_op.target);
@@ -147,9 +157,57 @@ fn simInstr(inst: t.Instruction) !void {
                 }
             }
 
-            mutation_result.original_value = dest_ptr.*;
-            dest_ptr.* = src_val;
-            mutation_result.updated_value = dest_ptr.*;
+            var src_ptr: TaggedPointer = undefined;
+            switch (inst.source.?) {
+                .IMMEDIATE => |immediate_op| {
+                    if (immediate_op.value < 255) {
+                        var one_byte: u8 = @intCast(immediate_op.value);
+                        src_ptr = TaggedPointer{
+                            .u8_ptr = &one_byte
+                        };
+                    } else {
+                        var two_bytes: u16 = @intCast(immediate_op.value);
+                        src_ptr = TaggedPointer {
+                            .u16_ptr = &two_bytes
+                        };
+                    }
+                },
+                .REGISTER => |register_op| {
+                      src_ptr = ptrForReg(register_op.target);
+                },
+                else => {
+                    return SimError.NotImplemented;
+                }
+            }
+            
+            switch (dest_ptr) {
+                .u8_ptr => |d_ptr| {
+                    switch (src_ptr) {
+                        .u8_ptr => |s_ptr| {
+                            mutation_result.original_value = d_ptr.*;
+                            d_ptr.* = s_ptr.*;
+                        },
+                        .u16_ptr => {
+                            std.log.err("invalid instruction, moving sixteen bit value to eight bit register", .{});
+                            return SimError.InvalidInstruction;
+                        }
+                    }
+                    mutation_result.updated_value = d_ptr.*;
+                },
+                .u16_ptr => |d_ptr| {
+                    switch (src_ptr) {
+                        .u8_ptr => |s_ptr| {
+                            mutation_result.original_value = d_ptr.*;
+                            d_ptr.* = s_ptr.*;
+                        },
+                        .u16_ptr => |s_ptr| {
+                            mutation_result.original_value = d_ptr.*;
+                            d_ptr.* = s_ptr.*;
+                        }
+                    }
+                    mutation_result.updated_value = d_ptr.*;
+                },
+            }
             
         },
         else => {
