@@ -160,16 +160,20 @@ fn simInstr(inst: t.Instruction) !void {
             var src_ptr: TaggedPointer = undefined;
             switch (inst.source.?) {
                 .IMMEDIATE => |immediate_op| {
-                    if (immediate_op.value < 255) {
-                        var one_byte: u8 = @intCast(immediate_op.value);
-                        src_ptr = TaggedPointer{
-                            .u8_ptr = &one_byte
-                        };
-                    } else {
-                        var two_bytes: u16 = @intCast(immediate_op.value);
-                        src_ptr = TaggedPointer {
-                            .u16_ptr = &two_bytes
-                        };
+                    switch (dest_ptr.size()) {
+                        1 => {
+                            var one_byte: u8 = @intCast(immediate_op.value);
+                            src_ptr = TaggedPointer{
+                                .u8_ptr = &one_byte
+                            };
+                        },
+                        2 => {
+                            var two_bytes: u16 = @intCast(immediate_op.value);
+                            src_ptr = TaggedPointer {
+                                .u16_ptr = &two_bytes
+                            };
+                        },
+                        else => unreachable
                     }
                 },
                 .REGISTER => |register_op| {
@@ -180,35 +184,23 @@ fn simInstr(inst: t.Instruction) !void {
                 }
             }
             
+            if (src_ptr.size() != dest_ptr.size()) {
+                std.log.err("invalid instruction, incompatible data sizes during move", .{});
+                return SimError.InvalidInstruction;
+            }
+            
             switch (dest_ptr) {
                 .u8_ptr => |d_ptr| {
-                    switch (src_ptr) {
-                        .u8_ptr => |s_ptr| {
-                            mutation_result.original_value = d_ptr.*;
-                            d_ptr.* = s_ptr.*;
-                        },
-                        .u16_ptr => {
-                            std.log.err("invalid instruction, moving sixteen bit value to eight bit register", .{});
-                            return SimError.InvalidInstruction;
-                        }
-                    }
+                    mutation_result.original_value = d_ptr.*;
+                    d_ptr.* = src_ptr.u8_ptr.*;
                     mutation_result.updated_value = d_ptr.*;
                 },
                 .u16_ptr => |d_ptr| {
-                    switch (src_ptr) {
-                        .u8_ptr => |s_ptr| {
-                            mutation_result.original_value = d_ptr.*;
-                            d_ptr.* = s_ptr.*;
-                        },
-                        .u16_ptr => |s_ptr| {
-                            mutation_result.original_value = d_ptr.*;
-                            d_ptr.* = s_ptr.*;
-                        }
-                    }
+                    mutation_result.original_value = d_ptr.*;
+                    d_ptr.* = src_ptr.u16_ptr.*;
                     mutation_result.updated_value = d_ptr.*;
-                },
+                }
             }
-            
         },
         else => {
             return SimError.NotImplemented;
