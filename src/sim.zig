@@ -126,10 +126,50 @@ fn ptrForReg(name: t.RegisterName) TaggedPointer {
     };
 }
 
+fn valueFromOperand(operand: t.Operand) i64 {
+    switch (operand) {
+        .ADDRESS => unreachable,
+        .IMMEDIATE => |io| {
+            return @intCast(io.value);
+        },
+        .REGISTER => |ro| {
+            switch (ptrForReg(ro.target)) {
+                .u8_ptr => |eight| {
+                    return @intCast(eight.*);
+                },
+                .u16_ptr => |sixteen| {
+                    return @intCast(sixteen.*);
+                } 
+            }
+        },
+        .TARGET => unreachable,
+    }
+}
+
+fn writeToOperand(op: t.Operand, value: i64) !void {
+    var ptr: TaggedPointer = undefined;
+    switch (op) {
+        .ADDRESS => return SimError.NotImplemented,
+        .REGISTER => |ro| {
+            ptr = ptrForReg(ro.target);
+        },
+        else => return SimError.InvalidInstruction,
+    }
+    
+    switch (ptr) {
+        .u8_ptr => |eight_ptr| {
+            eight_ptr.* = @intCast(value);
+        },
+        .u16_ptr => |sixteen_ptr| {
+            sixteen_ptr.* = @intCast(value);
+        }
+    }
+}
+
 const MutationResult = struct {
     register_name: t.RegisterName,
-    original_value: u16,
-    updated_value: u16,
+    original_value: i64,
+    updated_value: i64,
 };
 
 const SimError = error {
@@ -139,68 +179,19 @@ const SimError = error {
 
 fn simInstr(inst: t.Instruction) !void {
     var mutation_result: MutationResult = undefined;
+
+    const dest_val = valueFromOperand(inst.dest);
+    mutation_result.original_value = dest_val;
+    
+    var src_val: i64 = 0;
+    if (inst.source != null) {
+        src_val = valueFromOperand(inst.source.?);
+    }
     
     switch (inst.name) {
         t.OperationName.MOV => {
-            if(inst.source == null) {
-                return SimError.InvalidInstruction;
-            }
-
-            var dest_ptr: TaggedPointer = undefined;
-            switch (inst.dest) {
-                .REGISTER => |register_op| {
-                    dest_ptr = ptrForReg(register_op.target);
-                    mutation_result.register_name = register_op.target;
-                },
-                else => {
-                    return SimError.NotImplemented;
-                }
-            }
-
-            var src_ptr: TaggedPointer = undefined;
-            switch (inst.source.?) {
-                .IMMEDIATE => |immediate_op| {
-                    switch (dest_ptr.size()) {
-                        1 => {
-                            var one_byte: u8 = @intCast(immediate_op.value);
-                            src_ptr = TaggedPointer{
-                                .u8_ptr = &one_byte
-                            };
-                        },
-                        2 => {
-                            var two_bytes: u16 = @intCast(immediate_op.value);
-                            src_ptr = TaggedPointer {
-                                .u16_ptr = &two_bytes
-                            };
-                        },
-                        else => unreachable
-                    }
-                },
-                .REGISTER => |register_op| {
-                      src_ptr = ptrForReg(register_op.target);
-                },
-                else => {
-                    return SimError.NotImplemented;
-                }
-            }
-            
-            if (src_ptr.size() != dest_ptr.size()) {
-                std.log.err("invalid instruction, incompatible data sizes during move", .{});
-                return SimError.InvalidInstruction;
-            }
-            
-            switch (dest_ptr) {
-                .u8_ptr => |d_ptr| {
-                    mutation_result.original_value = d_ptr.*;
-                    d_ptr.* = src_ptr.u8_ptr.*;
-                    mutation_result.updated_value = d_ptr.*;
-                },
-                .u16_ptr => |d_ptr| {
-                    mutation_result.original_value = d_ptr.*;
-                    d_ptr.* = src_ptr.u16_ptr.*;
-                    mutation_result.updated_value = d_ptr.*;
-                }
-            }
+            try writeToOperand(inst.dest, src_val);
+            mutation_result.updated_value = valueFromOperand(inst.dest);
         },
         else => {
             return SimError.NotImplemented;
