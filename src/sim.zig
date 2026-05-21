@@ -126,11 +126,12 @@ fn ptrForReg(name: t.RegisterName) TaggedPointer {
     };
 }
 
-fn valueFromOperand(operand: t.Operand) i64 {
+fn valueFromOperand(operand: t.Operand) u16 {
     switch (operand) {
         .ADDRESS => unreachable,
         .IMMEDIATE => |io| {
-            return @intCast(io.value);
+            const pos_int: u16 = @bitCast(io.value);
+            return @intCast(pos_int);
         },
         .REGISTER => |ro| {
             switch (ptrForReg(ro.target)) {
@@ -146,7 +147,7 @@ fn valueFromOperand(operand: t.Operand) i64 {
     }
 }
 
-fn writeToOperand(op: t.Operand, value: i64) !void {
+fn writeToOperand(op: t.Operand, value: u16) !void {
     var ptr: TaggedPointer = undefined;
     switch (op) {
         .ADDRESS => return SimError.NotImplemented,
@@ -166,10 +167,20 @@ fn writeToOperand(op: t.Operand, value: i64) !void {
     }
 }
 
+const Flags = struct {
+    zero: bool,
+    sign: bool
+};
+
+var flags = Flags {
+    .zero = false,
+    .sign = false
+};
+
 const MutationResult = struct {
     register_name: t.RegisterName,
-    original_value: i64,
-    updated_value: i64,
+    original_value: u64,
+    updated_value: u64,
 };
 
 const SimError = error {
@@ -183,7 +194,7 @@ fn simInstr(inst: t.Instruction) !void {
     const dest_val = valueFromOperand(inst.dest);
     mutation_result.original_value = dest_val;
     
-    var src_val: i64 = 0;
+    var src_val: u16 = 0;
     if (inst.source != null) {
         src_val = valueFromOperand(inst.source.?);
     }
@@ -191,6 +202,22 @@ fn simInstr(inst: t.Instruction) !void {
     switch (inst.name) {
         t.OperationName.MOV => {
             try writeToOperand(inst.dest, src_val);
+            mutation_result.updated_value = valueFromOperand(inst.dest);
+        },
+        t.OperationName.ADD => {
+            const res_val = src_val + dest_val;
+            try writeToOperand(inst.dest, res_val);
+            mutation_result.updated_value = valueFromOperand(inst.dest);
+        },
+        t.OperationName.SUB => {
+            const res_val = dest_val - src_val;
+            try writeToOperand(inst.dest, res_val);
+            mutation_result.updated_value = valueFromOperand(inst.dest);
+        },
+        t.OperationName.CMP => {
+            // cmp is just sub but cmp doesn’t write the result.
+            // const res_val = src_val - dest_val;
+            // write flags
             mutation_result.updated_value = valueFromOperand(inst.dest);
         },
         else => {
