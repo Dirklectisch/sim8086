@@ -224,7 +224,17 @@ fn simInstr(inst: t.Instruction) !void {
         }
     }
     
-    printMutation( inst, mutation_result);
+    switch (inst.name) {
+        t.OperationName.MOV, t.OperationName.ADD, t.OperationName.SUB => {
+            printInstruction(inst);
+            printMutation(mutation_result);            
+        },
+        t.OperationName.CMP => {
+            printInstruction(inst);
+        },
+        else => {}
+    }
+    p.print("\n", .{});
 }
 
 pub fn simProgram(instructions: []t.Instruction) !void {
@@ -263,9 +273,12 @@ fn printRegister(name: []const u8, ptr: *u16) void {
     p.print("      {s}: 0x{x:0>4} ({d})\n", .{name, ptr.*, ptr.*});
 }
 
-fn printMutation(instr: t.Instruction, result: MutationResult) void {
-    // Example: "mov ax, 1 ; ax:0x0->0x1"
+fn printInstruction(instr: t.Instruction) void {
     p.printInstr(instr);
-    p.print(" ; {s}:0x{x}->0x{x}", .{p.formatRegisterName(result.register_name), result.original_value, result.updated_value});
-    p.print("\n", .{});
+    p.print(" ;", .{});
+}
+
+fn printMutation(result: MutationResult) void {
+    // Example: " ax:0x0->0x1"
+    p.print(" {s}:0x{x}->0x{x}", .{p.formatRegisterName(result.register_name), result.original_value, result.updated_value});
 }
