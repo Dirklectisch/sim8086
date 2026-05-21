@@ -147,11 +147,20 @@ fn valueFromOperand(operand: t.Operand) u16 {
     }
 }
 
-fn writeToOperand(op: t.Operand, value: u16) !void {
+const MutationResult = struct {
+    register_name: t.RegisterName,
+    original_value: u64,
+    updated_value: u64,
+};
+
+fn writeToOperand(op: t.Operand, value: u16) !MutationResult {
+    var result: MutationResult = undefined;
     var ptr: TaggedPointer = undefined;
     switch (op) {
         .ADDRESS => return SimError.NotImplemented,
         .REGISTER => |ro| {
+            result.register_name = ro.target;
+            result.original_value = valueFromOperand(op);
             ptr = ptrForReg(ro.target);
         },
         else => return SimError.InvalidInstruction,
@@ -165,6 +174,8 @@ fn writeToOperand(op: t.Operand, value: u16) !void {
             sixteen_ptr.* = @intCast(value);
         }
     }
+    result.updated_value = valueFromOperand(op);
+    return result;
 }
 
 const Flags = struct {
@@ -177,12 +188,6 @@ var flags = Flags {
     .sign = false
 };
 
-const MutationResult = struct {
-    register_name: t.RegisterName,
-    original_value: u64,
-    updated_value: u64,
-};
-
 const SimError = error {
     NotImplemented,
     InvalidInstruction
@@ -190,10 +195,8 @@ const SimError = error {
 
 fn simInstr(inst: t.Instruction) !void {
     var mutation_result: MutationResult = undefined;
-
-    const dest_val = valueFromOperand(inst.dest);
-    mutation_result.original_value = dest_val;
     
+    const dest_val = valueFromOperand(inst.dest);
     var src_val: u16 = 0;
     if (inst.source != null) {
         src_val = valueFromOperand(inst.source.?);
@@ -201,24 +204,20 @@ fn simInstr(inst: t.Instruction) !void {
     
     switch (inst.name) {
         t.OperationName.MOV => {
-            try writeToOperand(inst.dest, src_val);
-            mutation_result.updated_value = valueFromOperand(inst.dest);
+            mutation_result = try writeToOperand(inst.dest, src_val);
         },
         t.OperationName.ADD => {
-            const res_val = src_val + dest_val;
-            try writeToOperand(inst.dest, res_val);
-            mutation_result.updated_value = valueFromOperand(inst.dest);
+            const res_val = dest_val + src_val;
+            mutation_result = try writeToOperand(inst.dest, res_val);
         },
         t.OperationName.SUB => {
             const res_val = dest_val - src_val;
-            try writeToOperand(inst.dest, res_val);
-            mutation_result.updated_value = valueFromOperand(inst.dest);
+            mutation_result = try writeToOperand(inst.dest, res_val);
         },
         t.OperationName.CMP => {
             // cmp is just sub but cmp doesn’t write the result.
             // const res_val = src_val - dest_val;
             // write flags
-            mutation_result.updated_value = valueFromOperand(inst.dest);
         },
         else => {
             return SimError.NotImplemented;
@@ -267,6 +266,6 @@ fn printRegister(name: []const u8, ptr: *u16) void {
 fn printMutation(instr: t.Instruction, result: MutationResult) void {
     // Example: "mov ax, 1 ; ax:0x0->0x1"
     p.printInstr(instr);
-    p.print(" ; ax:0x{x}->0x{x}", .{result.original_value, result.updated_value});
+    p.print(" ; {s}:0x{x}->0x{x}", .{p.formatRegisterName(result.register_name), result.original_value, result.updated_value});
     p.print("\n", .{});
 }

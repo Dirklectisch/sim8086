@@ -18,6 +18,12 @@ pub fn flush() void {
     };
 }
 
+pub fn formatRegisterName(reg: t.RegisterName) [2]u8 {
+    var lower: [2]u8 = undefined;
+    _ = std.ascii.lowerString(&lower, @tagName(reg));
+    return lower;
+}
+
 pub fn printOperationName(name: t.OperationName) void {
     const tagName = @tagName(name);
     var buf: [3]u8 = undefined;
