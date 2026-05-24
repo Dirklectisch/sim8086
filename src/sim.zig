@@ -332,21 +332,21 @@ fn printFlagsResult(flags_result: FlagsResult) void {
     var sign_got_set = false;
     var zero_got_unset = false;
     var sign_got_unset = false;
-    if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
-        p.print(" flags:", .{});
-    }
     if (flags_result.zero != null) {
         zero_got_set =  flags_result.zero.?;
-        zero_got_unset = !flags_result.zero.?;
+        zero_got_unset = !zero_got_set;
     }
     if (flags_result.sign != null) {
         sign_got_set = flags_result.sign.?;
-        sign_got_unset = !flags_result.sign.?;
+        sign_got_unset = !sign_got_unset;
+    }
+    if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
+        p.print(" flags:", .{});
     }
     if (sign_got_unset) {
         p.print("S", .{});
     }
-    if (zero_got_set) {
+    if (zero_got_unset) {
         p.print("Z", .{});
     }
     if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
