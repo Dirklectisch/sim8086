@@ -197,7 +197,7 @@ const FlagsResult = struct {
 };
 
 
-fn setFlags(_: TaggedPointer, value: u16)  FlagsResult {
+fn setFlags(ptr: TaggedPointer, value: u16)  FlagsResult {
     var flags_result = FlagsResult {
         .zero = null,
         .sign = null
@@ -206,6 +206,31 @@ fn setFlags(_: TaggedPointer, value: u16)  FlagsResult {
     if (value == 0 and flags.zero == false) {
         flags.zero = true;
         flags_result.zero = true;
+    }
+    
+    switch (ptr) {
+        .u8_ptr => {
+            const sign = ptr.u8_ptr.* >> 7;
+            if (sign == 1 and flags.sign == false) {
+                flags.sign = true;
+                flags_result.sign = true;
+            }
+            if (sign == 0 and flags.sign == true) {
+                flags.sign = false;
+                flags_result.sign = false;
+            }
+        },
+        .u16_ptr => {
+            const sign = ptr.u16_ptr.* >> 15;
+            if (sign == 1 and flags.sign == false) {
+                flags.sign = true;
+                flags_result.sign = true;
+            }
+            if (sign == 0 and flags.sign == true) {
+                flags.sign = false;
+                flags_result.sign = false;
+            }
+        }
     }
     
     return flags_result;
@@ -240,7 +265,6 @@ fn simInstr(inst: t.Instruction) !void {
     switch (inst.name) {
         t.OperationName.MOV => {
             mutation_result = try writeToOperand(inst.dest, src_val);
-            flags_result = setFlags(dest_ptr, mutation_result.updated_value);
         },
         t.OperationName.ADD => {
             const res_val = dest_val + src_val;
@@ -338,7 +362,7 @@ fn printFlagsResult(flags_result: FlagsResult) void {
     }
     if (flags_result.sign != null) {
         sign_got_set = flags_result.sign.?;
-        sign_got_unset = !sign_got_unset;
+        sign_got_unset = !sign_got_set;
     }
     if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
         p.print(" flags:", .{});
