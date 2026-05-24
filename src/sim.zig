@@ -130,6 +130,9 @@ fn valueFromOperand(operand: t.Operand) u16 {
     switch (operand) {
         .ADDRESS => unreachable,
         .IMMEDIATE => |io| {
+            // We do not differentiate between signed and unsigned data during operations
+            // Therefore we change the value to unsigned here
+            // See also: Two's complement
             const pos_int: u16 = @bitCast(io.value);
             return @intCast(pos_int);
         },
@@ -149,8 +152,8 @@ fn valueFromOperand(operand: t.Operand) u16 {
 
 const MutationResult = struct {
     register_name: t.RegisterName,
-    original_value: u64,
-    updated_value: u64,
+    original_value: u16,
+    updated_value: u16,
 };
 
 fn writeToOperand(op: t.Operand, value: u16) !MutationResult {
@@ -188,6 +191,26 @@ var flags = Flags {
     .sign = false
 };
 
+const FlagsResult = struct {
+    zero: ?bool,
+    sign: ?bool,
+};
+
+
+fn setFlags(_: TaggedPointer, value: u16)  FlagsResult {
+    var flags_result = FlagsResult {
+        .zero = null,
+        .sign = null
+    };
+    
+    if (value == 0 and flags.zero == false) {
+        flags.zero = true;
+        flags_result.zero = true;
+    }
+    
+    return flags_result;
+}
+
 const SimError = error {
     NotImplemented,
     InvalidInstruction
@@ -195,42 +218,61 @@ const SimError = error {
 
 fn simInstr(inst: t.Instruction) !void {
     var mutation_result: MutationResult = undefined;
+    var flags_result = FlagsResult{
+        .sign = null,
+        .zero = null
+    };
     
     const dest_val = valueFromOperand(inst.dest);
     var src_val: u16 = 0;
     if (inst.source != null) {
         src_val = valueFromOperand(inst.source.?);
     }
+
+    var dest_ptr: TaggedPointer = undefined;
+    switch (inst.dest) {
+        .REGISTER => |ro| {
+            dest_ptr = ptrForReg(ro.target);
+        },
+        else => {},
+    }
     
     switch (inst.name) {
         t.OperationName.MOV => {
             mutation_result = try writeToOperand(inst.dest, src_val);
+            flags_result = setFlags(dest_ptr, mutation_result.updated_value);
         },
         t.OperationName.ADD => {
             const res_val = dest_val + src_val;
             mutation_result = try writeToOperand(inst.dest, res_val);
+            flags_result = setFlags(dest_ptr, mutation_result.updated_value);
         },
         t.OperationName.SUB => {
             const res_val = dest_val - src_val;
             mutation_result = try writeToOperand(inst.dest, res_val);
+            flags_result = setFlags(dest_ptr, mutation_result.updated_value);
         },
         t.OperationName.CMP => {
             // cmp is just sub but cmp doesn’t write the result.
-            // const res_val = src_val - dest_val;
-            // write flags
+            const res_val = dest_val - src_val;
+            flags_result = setFlags(dest_ptr, res_val);
         },
         else => {
             return SimError.NotImplemented;
         }
     }
     
+    // At this point all the mutations are done...
+    // ...we continue with different print configurations based on the result
     switch (inst.name) {
         t.OperationName.MOV, t.OperationName.ADD, t.OperationName.SUB => {
             printInstruction(inst);
-            printMutation(mutation_result);            
+            printMutation(mutation_result);
+            printFlagsResult(flags_result);
         },
         t.OperationName.CMP => {
             printInstruction(inst);
+            printFlagsResult(flags_result);
         },
         else => {}
     }
@@ -281,4 +323,39 @@ fn printInstruction(instr: t.Instruction) void {
 fn printMutation(result: MutationResult) void {
     // Example: " ax:0x0->0x1"
     p.print(" {s}:0x{x}->0x{x}", .{p.formatRegisterName(result.register_name), result.original_value, result.updated_value});
+}
+
+fn printFlagsResult(flags_result: FlagsResult) void {
+    // Example: "->PZ"
+    // Example: "S->"
+    var zero_got_set = false;
+    var sign_got_set = false;
+    var zero_got_unset = false;
+    var sign_got_unset = false;
+    if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
+        p.print(" flags:", .{});
+    }
+    if (flags_result.zero != null) {
+        zero_got_set =  flags_result.zero.?;
+        zero_got_unset = !flags_result.zero.?;
+    }
+    if (flags_result.sign != null) {
+        sign_got_set = flags_result.sign.?;
+        sign_got_unset = !flags_result.sign.?;
+    }
+    if (sign_got_unset) {
+        p.print("S", .{});
+    }
+    if (zero_got_set) {
+        p.print("Z", .{});
+    }
+    if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
+        p.print("->", .{});
+    }
+    if (sign_got_set) {
+        p.print("S", .{});
+    }
+    if (zero_got_set) {
+        p.print("Z", .{});
+    }
 }
