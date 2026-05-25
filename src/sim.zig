@@ -197,7 +197,7 @@ const FlagsResult = struct {
 };
 
 
-fn setFlags(ptr: TaggedPointer, value: u16)  FlagsResult {
+fn setFlags(dest_ptr: TaggedPointer, value: u16)  FlagsResult {
     var flags_result = FlagsResult {
         .zero = null,
         .sign = null
@@ -207,10 +207,14 @@ fn setFlags(ptr: TaggedPointer, value: u16)  FlagsResult {
         flags.zero = true;
         flags_result.zero = true;
     }
+    if (value != 0 and flags.zero == true) {
+        flags.zero = false;
+        flags_result.zero = false;
+    }
     
-    switch (ptr) {
+    switch (dest_ptr) {
         .u8_ptr => {
-            const sign = ptr.u8_ptr.* >> 7;
+            const sign = dest_ptr.u8_ptr.* >> 7;
             if (sign == 1 and flags.sign == false) {
                 flags.sign = true;
                 flags_result.sign = true;
@@ -221,7 +225,7 @@ fn setFlags(ptr: TaggedPointer, value: u16)  FlagsResult {
             }
         },
         .u16_ptr => {
-            const sign = ptr.u16_ptr.* >> 15;
+            const sign = dest_ptr.u16_ptr.* >> 15;
             if (sign == 1 and flags.sign == false) {
                 flags.sign = true;
                 flags_result.sign = true;
