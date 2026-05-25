@@ -337,6 +337,8 @@ pub fn simProgram(instructions: []t.Instruction) !void {
     printRegister("bp", register_pointers.bp);
     printRegister("si", register_pointers.si);
     printRegister("di", register_pointers.di);
+    printFlags();
+    p.print("\n", .{});
 }
 
 fn printRegister(name: []const u8, ptr: *u16) void {
@@ -384,6 +386,16 @@ fn printFlagsResult(flags_result: FlagsResult) void {
         p.print("S", .{});
     }
     if (zero_got_set) {
+        p.print("Z", .{});
+    }
+}
+
+fn printFlags() void {
+    p.print("   flags: ", .{});
+    if (flags.sign == true) {
+        p.print("S", .{});
+    }
+    if (flags.zero == true) {
         p.print("Z", .{});
     }
 }
