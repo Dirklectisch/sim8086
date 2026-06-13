@@ -20,36 +20,38 @@ const ArgumentError = error{
     UnknownCommand
 };
 
-pub fn parseArgs() ArgumentError!Arguments {
-    var parsedArguments: Arguments = undefined;
-    const length: usize = std.os.argv.len;
-    if (length < 3) {
-        return ArgumentError.MissingArgument;
-    }
-    
-    parsedArguments = Arguments{
+pub fn parseArgs(args: std.process.Args) ArgumentError!Arguments {
+    // Note argument parsing changed in Zig 0.16
+    // Link: https://codeberg.org/ziglang/zig/pulls/30644
+    var parsedArguments = Arguments{
         .command = undefined,
         .path = undefined
     };
 
-    for (std.os.argv, 0..) |arg, idx| {
+    var idx: u8 = 0;
+    var iterate = args.iterate();
+    while (iterate.next()) |arg| {
         if (idx == 1) {
-            const str: []const u8 = std.mem.span(arg);
-            parsedArguments.command = std.meta.stringToEnum(Commands, str) orelse {
+            parsedArguments.command = std.meta.stringToEnum(Commands, arg) orelse {
                 return ArgumentError.UnknownCommand; 
             };
         }
         
         if (idx == 2) {
-            parsedArguments.path = std.mem.span(arg); 
+            parsedArguments.path = arg; 
         }
+        idx = idx + 1;
+    }
+    
+    if (idx < 2) {
+        return ArgumentError.MissingArgument;
     }
 
     return parsedArguments;
 }
 
-pub fn main() u8 {
-    const args: Arguments = parseArgs() catch |err| {
+pub fn main(init: std.process.Init) u8 {
+    const args: Arguments = parseArgs(init.minimal.args) catch |err| {
         std.log.err("{t}: Invalid command line arguments", .{err});
         return 1;
     };
