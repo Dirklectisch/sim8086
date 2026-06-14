@@ -51,6 +51,8 @@ pub fn parseArgs(args: std.process.Args) ArgumentError!Arguments {
 }
 
 pub fn main(init: std.process.Init) u8 {
+    const allocator = init.arena.allocator();
+    
     const args: Arguments = parseArgs(init.minimal.args) catch |err| {
         std.log.err("{t}: Invalid command line arguments", .{err});
         return 1;
@@ -64,10 +66,6 @@ pub fn main(init: std.process.Init) u8 {
         return 1;
     };
     defer file.close(init.io);
-
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
     
     const megabyte: usize = 1000000;
     var file_reader = file.reader(init.io, &.{});
