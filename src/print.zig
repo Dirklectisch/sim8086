@@ -23,10 +23,10 @@ pub fn flush() void {
     };
 }
 
-pub fn formatRegisterName(reg: t.RegisterName) [2]u8 {
+pub fn printRegisterName(reg: t.RegisterName) void {
     var lower: [2]u8 = undefined;
     _ = std.ascii.lowerString(&lower, @tagName(reg));
-    return lower;
+    print("{s}", .{lower});
 }
 
 pub fn printOperationName(name: t.OperationName) void {

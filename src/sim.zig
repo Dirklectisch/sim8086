@@ -352,7 +352,9 @@ fn printInstruction(instr: t.Instruction) void {
 
 fn printMutation(result: MutationResult) void {
     // Example: " ax:0x0->0x1"
-    p.print(" {s}:0x{x}->0x{x}", .{p.formatRegisterName(result.register_name), result.original_value, result.updated_value});
+    p.print(" ", .{});
+    p.printRegisterName(result.register_name);
+    p.print(":0x{x}->0x{x}", .{result.original_value, result.updated_value});
 }
 
 fn printFlagsResult(flags_result: FlagsResult) void {
