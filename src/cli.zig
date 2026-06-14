@@ -56,6 +56,9 @@ pub fn main(init: std.process.Init) u8 {
         return 1;
     };
     
+    p.initWriter(init.io);
+    defer p.flush();
+    
     const file = std.Io.Dir.cwd().openFile(init.io, args.path, .{ .mode = .read_only }) catch |err| {
         std.log.err("{t}: Opening file at path {s} failed", .{ err, args.path });
         return 1;
@@ -90,6 +93,5 @@ pub fn main(init: std.process.Init) u8 {
         }
     }
     
-    p.flush();
     return 0;
 }

@@ -1,13 +1,15 @@
 const std = @import("std");
 const t = @import("types.zig");
 
-var threaded: std.Io.Threaded = .init_single_threaded;
-const io = threaded.io();
-
 // Global standard out buffer, don't forget to flush!
 var stdout_buffer: [1024]u8 = undefined;
-var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
-const stdout_writer_ptr  = &stdout_writer.interface;
+var stdout_writer : std.Io.File.Writer = undefined;
+var stdout_writer_ptr: *std.Io.Writer  = undefined;
+
+pub fn initWriter(io: std.Io) void {
+    stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    stdout_writer_ptr = &stdout_writer.interface;
+}
 
 pub fn print(comptime fmt: []const u8, args: anytype) void {
     stdout_writer_ptr.print(fmt, args) catch |err| {
