@@ -294,12 +294,15 @@ fn simInstr(inst: t.Instruction) !void {
     // ...we continue with different print configurations based on the result
     switch (inst.name) {
         t.OperationName.MOV, t.OperationName.ADD, t.OperationName.SUB => {
-            printInstruction(inst);
+            p.printInstr(inst);
+            printDivider();
             printMutation(mutation_result);
+            printSpace();
             printFlagsResult(flags_result);
         },
         t.OperationName.CMP => {
-            printInstruction(inst);
+            p.printInstr(inst);
+            printDivider();
             printFlagsResult(flags_result);
         },
         else => {}
@@ -314,6 +317,10 @@ pub fn simProgram(instructions: []t.Instruction) !void {
         };
     }
     
+    printRegisterOverview();
+}
+
+fn printRegisterOverview() void {
     // Print final overview of register state
     // 
     // Example:
@@ -327,7 +334,7 @@ pub fn simProgram(instructions: []t.Instruction) !void {
     // bp: 0x0006 (6)
     // si: 0x0007 (7)
     // di: 0x0008 (8)
-    
+
     p.print("Final registers:\n", .{});
     printRegister("ax", register_pointers.ax);
     printRegister("bx", register_pointers.bx);
@@ -345,14 +352,16 @@ fn printRegister(name: []const u8, ptr: *u16) void {
     p.print("      {s}: 0x{x:0>4} ({d})\n", .{name, ptr.*, ptr.*});
 }
 
-fn printInstruction(instr: t.Instruction) void {
-    p.printInstr(instr);
-    p.print(" ;", .{});
+fn printDivider() void {
+    p.print(" ; ", .{});
+}
+
+fn printSpace() void {
+    p.print(" ", .{});
 }
 
 fn printMutation(result: MutationResult) void {
-    // Example: " ax:0x0->0x1"
-    p.print(" ", .{});
+    // Example: "ax:0x0->0x1"
     p.printRegisterName(result.register_name);
     p.print(":0x{x}->0x{x}", .{result.original_value, result.updated_value});
 }
@@ -372,8 +381,9 @@ fn printFlagsResult(flags_result: FlagsResult) void {
         sign_got_set = flags_result.sign.?;
         sign_got_unset = !sign_got_set;
     }
-    if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
-        p.print(" flags:", .{});
+    const any_got_set = zero_got_set or sign_got_set or zero_got_unset or sign_got_unset;
+    if (any_got_set) {
+        p.print("flags:", .{});
     }
     if (sign_got_unset) {
         p.print("S", .{});
@@ -381,7 +391,7 @@ fn printFlagsResult(flags_result: FlagsResult) void {
     if (zero_got_unset) {
         p.print("Z", .{});
     }
-    if (zero_got_set or sign_got_set or zero_got_unset or sign_got_unset) {
+    if (any_got_set) {
         p.print("->", .{});
     }
     if (sign_got_set) {
