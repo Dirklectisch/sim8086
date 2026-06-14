@@ -55,19 +55,20 @@ pub fn main(init: std.process.Init) u8 {
         std.log.err("{t}: Invalid command line arguments", .{err});
         return 1;
     };
-
-    const file = std.fs.cwd().openFile(args.path, .{ .mode = .read_only }) catch |err| {
+    
+    const file = std.Io.Dir.cwd().openFile(init.io, args.path, .{ .mode = .read_only }) catch |err| {
         std.log.err("{t}: Opening file at path {s} failed", .{ err, args.path });
         return 1;
     };
-    defer file.close();
+    defer file.close(init.io);
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
     
     const megabyte: usize = 1000000;
-    const memory = file.readToEndAlloc(allocator, megabyte) catch |err| {
+    var file_reader = file.reader(init.io, &.{});
+    const memory = file_reader.interface.allocRemaining(allocator, .limited(megabyte)) catch |err| {
         std.log.err("{t}: Reading file at path {s} failed", .{ err, args.path });
         return 1;
     };
